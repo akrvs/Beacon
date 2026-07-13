@@ -40,6 +40,14 @@ async def run_audit(domain: str) -> tuple[Site, list[Finding]]:
 def audit(
     domain: str = typer.Argument(..., help="Domain or URL to audit, e.g. example.com"),
     json_out: bool = typer.Option(False, "--json", help="Emit the report as JSON"),
+    html: Path = typer.Option(None, "--html", help="Also write a shareable HTML report to this path"),
+    min_score: int = typer.Option(
+        None,
+        "--min-score",
+        help="Exit 1 if the today-score is below this threshold (for CI)",
+        min=0,
+        max=100,
+    ),
 ) -> None:
     """Audit a domain's agent-readiness and print a scored report."""
     site, findings = asyncio.run(run_audit(domain))
@@ -48,6 +56,12 @@ def audit(
         typer.echo(report.to_json(site.domain, findings, card))
     else:
         typer.echo(report.render_text(site.domain, findings, card))
+    if html is not None:
+        html.write_text(report.render_html(site.domain, findings, card))
+        typer.echo(f"\nHTML report written to {html}")
+    if min_score is not None and (card.today.percent or 0) < min_score:
+        typer.echo(f"Score {card.today.percent or 0} is below --min-score {min_score}", err=True)
+        raise typer.Exit(1)
 
 
 @generate_app.command("llms-txt")

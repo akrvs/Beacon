@@ -19,7 +19,7 @@
 ![category](https://img.shields.io/badge/category-Agents%20%2F%20Discovery-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Medium-yellow)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-21%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-31%20passing-brightgreen)
 
 ```
 ┌─[ TARGET ]──────────────────────────────────────────────────┐
@@ -56,8 +56,9 @@ refactor. No payments are built here — readiness and discovery only.
 ```
 crawl_policy   robots.txt AI-crawler rules (fetchers vs training bots) · sitemap
 content        JS-free text extraction · schema.org JSON-LD · metadata · landmarks · form operability
-api_mcp        llms.txt · OpenAPI discovery · MCP endpoint probes          [future tier]
-checkout       UCP / ACP / AP2 / x402 support signals                      [future tier]
+               product-page deep audit: Product/Offer JSON-LD, price · currency · availability
+api_mcp        llms.txt · OpenAPI discovery · MCP endpoint probes · platform detection   [future tier]
+checkout       UCP / ACP / AP2 / x402 support signals                                    [future tier]
 ```
 
 Every finding carries a status (`PASS / WARN / FAIL / INFO`), a weight, a tier,
@@ -74,8 +75,10 @@ uv run beacon --help
 ## [ User Flag ] — audit a domain
 
 ```bash
-uv run beacon audit shop.example            # human report
-uv run beacon audit shop.example --json     # machine report
+uv run beacon audit shop.example                    # human report
+uv run beacon audit shop.example --json             # machine report
+uv run beacon audit shop.example --html report.html # shareable HTML report
+uv run beacon audit shop.example --min-score 70     # CI gate: exit 1 below threshold
 ```
 
 ```
@@ -104,15 +107,18 @@ uv run beacon generate mcp openapi.json                    # runnable MCP server
 ```
 src/beacon/
 ├── cli.py              audit · generate llms-txt · generate mcp
-├── fetch.py            polite client: honest UA, cached, rate-limited
-├── checks/
+├── fetch.py            polite client: honest UA, deduped, bounded concurrency
+├── discover.py         sitemap walking (incl. index children) · homepage links
+├── platform.py         Shopify/Woo/Wix/... detection → platform-aware fixes
+├── checks/             all run in parallel against one shared fetch cache
 │   ├── base.py         Check protocol · Finding · Tier — the plugin contract
 │   ├── crawl_policy.py RFC 9309 robots parsing, AI-agent allowlist analysis
 │   ├── content.py      what an agent's text extraction actually sees
+│   ├── product.py      deep-audits a real product page's Product/Offer JSON-LD
 │   ├── api_mcp.py      llms.txt / OpenAPI / MCP discovery probes
 │   └── checkout.py     emerging commerce-protocol signals
 ├── scoring.py          two-tier weighted scoring — today vs future
-├── report.py           terminal + JSON reports with fixes
+├── report.py           terminal · JSON · self-contained HTML reports
 └── generate/
     ├── llmstxt.py      sitemap → curated llms.txt draft
     └── mcp_scaffold.py OpenAPI spec → runnable FastMCP server project
@@ -130,6 +136,10 @@ src/beacon/
 - [x] Four-layer audit with two-tier scoring
 - [x] llms.txt generator (sitemap-driven, homepage-link fallback)
 - [x] MCP server scaffold from an OpenAPI spec
-- [ ] Product-page deep audit (Product/Offer JSON-LD, price extraction)
-- [ ] Platform-aware fixes (Shopify/Woo can't self-host MCP — say so)
-- [ ] Shareable HTML report
+- [x] Product-page deep audit (Product/Offer JSON-LD, price extraction)
+- [x] Platform-aware fixes (Shopify/Woo can't self-host MCP — say so)
+- [x] Shareable HTML report (--html) and CI gate (--min-score)
+- [ ] Batch audits (`beacon audit --file domains.txt`) with a ranking table
+- [ ] Score history: store JSON runs, `beacon diff` between audits
+- [ ] YAML OpenAPI specs + auth-aware MCP scaffolds
+- [ ] Agentic-discovery sitemap check (Shopify now ships sitemap_agentic_discovery.xml)

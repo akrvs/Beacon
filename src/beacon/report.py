@@ -61,3 +61,116 @@ def render_text(domain: str, findings: list[Finding], card: ScoreCard) -> str:
 
 def _fmt(percent: int | None) -> str:
     return f"{percent}/100" if percent is not None else "n/a (no checks in this tier yet)"
+
+
+_HTML_STATUS = {
+    Status.PASS: ("PASS", "pass"),
+    Status.WARN: ("WARN", "warn"),
+    Status.FAIL: ("FAIL", "fail"),
+    Status.INFO: ("INFO", "info"),
+}
+
+
+def render_html(domain: str, findings: list[Finding], card: ScoreCard) -> str:
+    """Self-contained shareable HTML report (no external assets, light/dark)."""
+    audited = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    sections = []
+    for layer in Layer:
+        layer_findings = [f for f in findings if f.layer is layer]
+        if not layer_findings:
+            continue
+        rows = []
+        for finding in layer_findings:
+            label, css = _HTML_STATUS[finding.status]
+            tier = '<span class="tier">future</span>' if finding.tier is Tier.FUTURE else ""
+            evidence = (
+                f'<div class="detail">evidence: {_esc(finding.evidence)}</div>'
+                if finding.evidence
+                else ""
+            )
+            fix = (
+                f'<div class="detail fix">fix: {_esc(finding.fix)}</div>'
+                if finding.fix and finding.status in (Status.WARN, Status.FAIL)
+                else ""
+            )
+            rows.append(
+                f'<li><span class="badge {css}">{label}</span>{tier}'
+                f"<span>{_esc(finding.summary)}</span>{evidence}{fix}</li>"
+            )
+        sections.append(
+            f"<section><h2>{_LAYER_TITLE[layer]}</h2><ul>{''.join(rows)}</ul></section>"
+        )
+    return _HTML_TEMPLATE.format(
+        domain=_esc(domain),
+        audited=audited,
+        today=_fmt(card.today.percent),
+        future=_fmt(card.future.percent),
+        sections="".join(sections),
+    )
+
+
+def _esc(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+_HTML_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon audit — {domain}</title>
+<style>
+  :root {{
+    --bg: #ffffff; --fg: #1a1d21; --muted: #5c6470; --line: #e3e6ea;
+    --pass: #1a7f37; --warn: #9a6700; --fail: #cf222e; --info: #57606a;
+    --chip-pass: #dafbe1; --chip-warn: #fff8c5; --chip-fail: #ffebe9; --chip-info: #eaeef2;
+  }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --line: #30363d;
+      --pass: #3fb950; --warn: #d29922; --fail: #f85149; --info: #8b949e;
+      --chip-pass: #12261e; --chip-warn: #272115; --chip-fail: #2d1618; --chip-info: #21262d;
+    }}
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.5 system-ui, -apple-system, sans-serif; }}
+  main {{ max-width: 860px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }}
+  h1 {{ font-size: 1.4rem; margin: 0; }} h1 span {{ color: var(--muted); font-weight: 400; }}
+  .meta {{ color: var(--muted); font-size: .85rem; margin-top: .25rem; }}
+  .scores {{ display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.75rem 0 .5rem; }}
+  .tile {{ flex: 1 1 220px; border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.25rem; }}
+  .tile .label {{ color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }}
+  .tile .value {{ font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }}
+  section {{ margin-top: 2rem; }}
+  h2 {{ font-size: 1.05rem; border-bottom: 1px solid var(--line); padding-bottom: .4rem; }}
+  ul {{ list-style: none; margin: 0; padding: 0; }}
+  li {{ padding: .6rem 0; border-bottom: 1px solid var(--line); }}
+  .badge {{ display: inline-block; font-size: .72rem; font-weight: 700; padding: .1rem .5rem;
+           border-radius: 999px; margin-right: .6rem; vertical-align: 1px; }}
+  .badge.pass {{ color: var(--pass); background: var(--chip-pass); }}
+  .badge.warn {{ color: var(--warn); background: var(--chip-warn); }}
+  .badge.fail {{ color: var(--fail); background: var(--chip-fail); }}
+  .badge.info {{ color: var(--info); background: var(--chip-info); }}
+  .tier {{ color: var(--muted); font-size: .72rem; border: 1px solid var(--line);
+          border-radius: 999px; padding: .05rem .45rem; margin-right: .6rem; }}
+  .detail {{ color: var(--muted); font-size: .85rem; margin: .25rem 0 0 .35rem;
+            overflow-wrap: anywhere; }}
+  .detail.fix {{ color: var(--fg); }}
+  footer {{ color: var(--muted); font-size: .8rem; margin-top: 2.5rem; }}
+</style>
+</head>
+<body>
+<main>
+  <h1>Beacon audit <span>— {domain}</span></h1>
+  <div class="meta">{audited}</div>
+  <div class="scores">
+    <div class="tile"><div class="label">Agent visibility today</div><div class="value">{today}</div></div>
+    <div class="tile"><div class="label">Future readiness</div><div class="value">{future}</div></div>
+  </div>
+  {sections}
+  <footer>Generated by <a href="https://github.com/akrvs/Beacon">Beacon</a> — agent-readiness audits.</footer>
+</main>
+</body>
+</html>
+"""
