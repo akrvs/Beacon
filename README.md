@@ -19,7 +19,7 @@
 ![category](https://img.shields.io/badge/category-Agents%20%2F%20Discovery-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Medium-yellow)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-19%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-21%20passing-brightgreen)
 
 ```
 ┌─[ TARGET ]──────────────────────────────────────────────────┐
@@ -29,7 +29,7 @@
 │ stack      : Python 3.12 · httpx · selectolax · Typer       │
 │ layers     : crawl policy · content · api/mcp · checkout    │
 │ flags      : user [audit + llms.txt]   root [MCP scaffold]  │
-│ status     : USER OWNED — root flag in progress             │
+│ status     : OWNED — audit · llms.txt · MCP scaffold live   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -96,7 +96,7 @@ Crawl policy
 
 ```bash
 uv run beacon generate llms-txt shop.example -o llms.txt   # sitemap-driven draft
-uv run beacon generate mcp openapi.json                    # MCP server scaffold (in progress)
+uv run beacon generate mcp openapi.json                    # runnable MCP server scaffold
 ```
 
 ## [ Loadout ] — architecture
@@ -114,7 +114,8 @@ src/beacon/
 ├── scoring.py          two-tier weighted scoring — today vs future
 ├── report.py           terminal + JSON reports with fixes
 └── generate/
-    └── llmstxt.py      sitemap → curated llms.txt draft
+    ├── llmstxt.py      sitemap → curated llms.txt draft
+    └── mcp_scaffold.py OpenAPI spec → runnable FastMCP server project
 ```
 
 ## [ Rules of Engagement ]
@@ -128,7 +129,7 @@ src/beacon/
 
 - [x] Four-layer audit with two-tier scoring
 - [x] llms.txt generator (sitemap-driven, homepage-link fallback)
-- [ ] MCP server scaffold from an OpenAPI spec
+- [x] MCP server scaffold from an OpenAPI spec
 - [ ] Product-page deep audit (Product/Offer JSON-LD, price extraction)
 - [ ] Platform-aware fixes (Shopify/Woo can't self-host MCP — say so)
 - [ ] Shareable HTML report
