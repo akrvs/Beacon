@@ -12,6 +12,7 @@ import json
 import httpx
 
 from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.discover import sitemap_index_children
 from beacon.fetch import Site
 from beacon.platform import HOSTED_PLATFORMS, detect_platform
 
@@ -48,7 +49,10 @@ class ApiMcpCheck:
         platform = await detect_platform(site)
         findings = list(
             await asyncio.gather(
-                self._llms_txt(site), self._openapi(site), self._mcp(site, platform)
+                self._llms_txt(site),
+                self._openapi(site),
+                self._mcp(site, platform),
+                self._agentic_sitemap(site),
             )
         )
         if platform is not None:
@@ -140,4 +144,26 @@ class ApiMcpCheck:
             weight=3,
             summary="No MCP endpoint detected (/.well-known/mcp.json, /mcp)",
             fix=fix,
+        )
+
+    async def _agentic_sitemap(self, site: Site) -> Finding:
+        children = await sitemap_index_children(site)
+        agentic = [url for url in children if "agentic" in url.lower()]
+        if agentic:
+            return Finding(
+                id="agentic-discovery-sitemap",
+                layer=self.layer,
+                tier=Tier.FUTURE,
+                status=Status.PASS,
+                weight=1,
+                summary="An agentic-discovery sitemap is published — the platform is curating pages for agents",
+                evidence=agentic[0],
+            )
+        return Finding(
+            id="agentic-discovery-sitemap",
+            layer=self.layer,
+            tier=Tier.FUTURE,
+            status=Status.INFO,
+            weight=0,
+            summary="No agentic-discovery sitemap (e.g. Shopify's sitemap_agentic_discovery.xml) — an emerging signal, absence is normal",
         )

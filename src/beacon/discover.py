@@ -50,6 +50,21 @@ async def sitemap_urls(site: Site) -> list[str]:
     return []
 
 
+async def sitemap_index_children(site: Site) -> list[str]:
+    """Child sitemap URLs when the site's sitemap is an index, else []."""
+    robots_text = await site.robots_txt()
+    candidates = parse_robots(robots_text).sitemaps if robots_text else []
+    candidates.append(site.fetcher.url_for("/sitemap.xml"))
+    for sitemap_url in candidates:
+        root = await _fetch_xml(site, sitemap_url)
+        if root is None:
+            continue
+        if root.tag.endswith("sitemapindex"):
+            return [node.text for node in root.findall("sm:sitemap/sm:loc", _SITEMAP_NS) if node.text]
+        return []
+    return []
+
+
 async def _fetch_xml(site: Site, url: str) -> ET.Element | None:
     response = await site.get(url)
     if response is None or response.status_code != 200:

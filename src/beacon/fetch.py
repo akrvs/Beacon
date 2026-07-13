@@ -27,8 +27,9 @@ class Fetcher:
         self.base_url = base_url
         self._client = client or httpx.AsyncClient(
             headers={"User-Agent": USER_AGENT},
-            timeout=15.0,
+            timeout=8.0,
             follow_redirects=True,
+            http2=True,
         )
         self._owns_client = client is None
         self._tasks: dict[str, asyncio.Task[httpx.Response | None]] = {}

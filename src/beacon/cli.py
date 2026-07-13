@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 import typer
+import yaml
 
 from beacon import report
 from beacon.checks import ALL_CHECKS
@@ -88,7 +89,7 @@ def llms_txt(
 
 @generate_app.command("mcp")
 def mcp(
-    spec: str = typer.Argument(..., help="Path or URL to an OpenAPI JSON spec"),
+    spec: str = typer.Argument(..., help="Path or URL to an OpenAPI spec (JSON or YAML)"),
     output: Path = typer.Option(
         Path("mcp-server"), "--output", "-o", help="Directory to write the scaffold into"
     ),
@@ -103,8 +104,11 @@ def mcp(
         raw = Path(spec).read_text()
     try:
         spec_data = json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise typer.BadParameter(f"Spec is not valid JSON: {error}") from error
+    except json.JSONDecodeError:
+        try:
+            spec_data = yaml.safe_load(raw)
+        except yaml.YAMLError as error:
+            raise typer.BadParameter(f"Spec is neither valid JSON nor YAML: {error}") from error
     if not isinstance(spec_data, dict) or not spec_data.get("paths"):
         raise typer.BadParameter("Spec has no `paths` — is this really an OpenAPI document?")
 
