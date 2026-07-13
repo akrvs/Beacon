@@ -6,6 +6,8 @@ each one has proposed and reports honestly that absence is the norm today.
 
 from __future__ import annotations
 
+import asyncio
+
 from beacon.checks.base import Finding, Layer, Status, Tier
 from beacon.fetch import Site
 
@@ -22,9 +24,11 @@ class CheckoutCheck:
     layer = Layer.CHECKOUT
 
     async def run(self, site: Site) -> list[Finding]:
+        responses = await asyncio.gather(
+            *(site.get(path) for path in PROTOCOL_PROBES.values())
+        )
         supported: list[str] = []
-        for name, path in PROTOCOL_PROBES.items():
-            response = await site.get(path)
+        for name, response in zip(PROTOCOL_PROBES, responses):
             if response is not None and response.status_code == 200:
                 body = response.text.lstrip()[:100].lower()
                 if not body.startswith(("<!doctype", "<html")):

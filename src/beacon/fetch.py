@@ -8,6 +8,9 @@ import httpx
 
 USER_AGENT = "BeaconBot/0.1 (+https://github.com/akrvs/Beacon)"
 
+MAX_CONCURRENCY = 4
+REQUEST_DELAY = 0.15
+
 
 def normalize_base_url(domain: str) -> str:
     domain = domain.strip().rstrip("/")
@@ -17,7 +20,8 @@ def normalize_base_url(domain: str) -> str:
 
 
 class Fetcher:
-    """Caches GETs and serializes requests so an audit never hammers a host."""
+    """Caches and dedupes GETs; a semaphore bounds concurrency so parallel
+    checks never hammer a host."""
 
     def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
         self.base_url = base_url
@@ -27,8 +31,8 @@ class Fetcher:
             follow_redirects=True,
         )
         self._owns_client = client is None
-        self._cache: dict[str, httpx.Response | None] = {}
-        self._lock = asyncio.Lock()
+        self._tasks: dict[str, asyncio.Task[httpx.Response | None]] = {}
+        self._semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
 
     def url_for(self, path_or_url: str) -> str:
         if path_or_url.startswith(("http://", "https://")):
@@ -36,20 +40,28 @@ class Fetcher:
         return f"{self.base_url}/{path_or_url.lstrip('/')}"
 
     async def get(self, path_or_url: str) -> httpx.Response | None:
-        """GET a URL, returning None on network-level failure."""
+        """GET a URL, returning None on network-level failure. Concurrent
+        callers of the same URL share one request."""
         url = self.url_for(path_or_url)
-        async with self._lock:
-            if url in self._cache:
-                return self._cache[url]
+        task = self._tasks.get(url)
+        if task is None:
+            task = asyncio.create_task(self._fetch(url))
+            self._tasks[url] = task
+        return await asyncio.shield(task)
+
+    async def _fetch(self, url: str) -> httpx.Response | None:
+        async with self._semaphore:
             try:
                 response: httpx.Response | None = await self._client.get(url)
             except httpx.HTTPError:
                 response = None
-            self._cache[url] = response
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(REQUEST_DELAY)
             return response
 
     async def aclose(self) -> None:
+        for task in self._tasks.values():
+            if not task.done():
+                task.cancel()
         if self._owns_client:
             await self._client.aclose()
 

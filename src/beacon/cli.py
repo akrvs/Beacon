@@ -29,13 +29,11 @@ def main() -> None:
 
 async def run_audit(domain: str) -> tuple[Site, list[Finding]]:
     site = Site(domain)
-    findings: list[Finding] = []
     try:
-        for check in ALL_CHECKS:
-            findings.extend(await check.run(site))
+        results = await asyncio.gather(*(check.run(site) for check in ALL_CHECKS))
     finally:
         await site.aclose()
-    return site, findings
+    return site, [finding for check_findings in results for finding in check_findings]
 
 
 @app.command()

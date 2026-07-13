@@ -6,6 +6,7 @@ finding here is Tier.FUTURE and never affects the headline visibility score.
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -43,11 +44,9 @@ class ApiMcpCheck:
     layer = Layer.API_MCP
 
     async def run(self, site: Site) -> list[Finding]:
-        return [
-            await self._llms_txt(site),
-            await self._openapi(site),
-            await self._mcp(site),
-        ]
+        return list(
+            await asyncio.gather(self._llms_txt(site), self._openapi(site), self._mcp(site))
+        )
 
     async def _llms_txt(self, site: Site) -> Finding:
         response = await site.get("/llms.txt")
@@ -72,8 +71,9 @@ class ApiMcpCheck:
         )
 
     async def _openapi(self, site: Site) -> Finding:
-        for path in OPENAPI_PROBES:
-            spec = _openapi_spec(await site.get(path))
+        responses = await asyncio.gather(*(site.get(path) for path in OPENAPI_PROBES))
+        for path, response in zip(OPENAPI_PROBES, responses):
+            spec = _openapi_spec(response)
             if spec:
                 title = spec.get("info", {}).get("title", "")
                 return Finding(
@@ -96,8 +96,9 @@ class ApiMcpCheck:
         )
 
     async def _mcp(self, site: Site) -> Finding:
-        for path in MCP_PROBES:
-            if _is_real_text(await site.get(path)):
+        responses = await asyncio.gather(*(site.get(path) for path in MCP_PROBES))
+        for path, response in zip(MCP_PROBES, responses):
+            if _is_real_text(response):
                 return Finding(
                     id="mcp-endpoint",
                     layer=self.layer,
