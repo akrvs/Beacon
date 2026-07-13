@@ -23,14 +23,17 @@ _LAYER_TITLE = {
 }
 
 
-def to_json(domain: str, findings: list[Finding], card: ScoreCard) -> str:
-    payload = {
+def payload(domain: str, findings: list[Finding], card: ScoreCard) -> dict:
+    return {
         "domain": domain,
         "audited_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         **card.to_dict(),
         "findings": [f.to_dict() for f in findings],
     }
-    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def to_json(domain: str, findings: list[Finding], card: ScoreCard) -> str:
+    return json.dumps(payload(domain, findings, card), indent=2, ensure_ascii=False)
 
 
 def render_text(domain: str, findings: list[Finding], card: ScoreCard) -> str:

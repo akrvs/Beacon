@@ -10,10 +10,10 @@ import httpx
 import typer
 import yaml
 
-from beacon import report
+from beacon import history, report
 from beacon.checks import ALL_CHECKS
 from beacon.checks.base import Finding
-from beacon.fetch import Site, USER_AGENT
+from beacon.fetch import Site, USER_AGENT, normalize_base_url
 from beacon.generate.llmstxt import generate_llms_txt
 from beacon.generate.mcp_scaffold import scaffold_mcp_server
 from beacon.scoring import score
@@ -39,18 +39,30 @@ async def run_audit(domain: str) -> tuple[Site, list[Finding]]:
 
 @app.command()
 def audit(
-    domain: str = typer.Argument(..., help="Domain or URL to audit, e.g. example.com"),
+    domain: str = typer.Argument(None, help="Domain or URL to audit, e.g. example.com"),
+    domains_file: Path = typer.Option(
+        None, "--file", "-f", help="Audit every domain in this file (one per line) and print a ranking"
+    ),
     json_out: bool = typer.Option(False, "--json", help="Emit the report as JSON"),
     html: Path = typer.Option(None, "--html", help="Also write a shareable HTML report to this path"),
     min_score: int = typer.Option(
         None,
         "--min-score",
-        help="Exit 1 if the today-score is below this threshold (for CI)",
+        help="Exit 1 if any today-score is below this threshold (for CI)",
         min=0,
         max=100,
     ),
+    save: bool = typer.Option(True, "--save/--no-save", help="Record the run in audit history"),
 ) -> None:
-    """Audit a domain's agent-readiness and print a scored report."""
+    """Audit one domain (or a file of domains) and print a scored report."""
+    if (domain is None) == (domains_file is None):
+        raise typer.BadParameter("Provide either DOMAIN or --file, not both")
+    if domains_file is not None:
+        if html is not None:
+            raise typer.BadParameter("--html applies to single-domain audits only")
+        _audit_batch(domains_file, json_out=json_out, min_score=min_score, save=save)
+        return
+
     site, findings = asyncio.run(run_audit(domain))
     card = score(findings)
     if json_out:
@@ -60,9 +72,81 @@ def audit(
     if html is not None:
         html.write_text(report.render_html(site.domain, findings, card))
         typer.echo(f"\nHTML report written to {html}")
+    if save:
+        history.save_run(site.domain, report.payload(site.domain, findings, card))
     if min_score is not None and (card.today.percent or 0) < min_score:
         typer.echo(f"Score {card.today.percent or 0} is below --min-score {min_score}", err=True)
         raise typer.Exit(1)
+
+
+MAX_PARALLEL_SITES = 4
+
+
+def _audit_batch(domains_file: Path, *, json_out: bool, min_score: int | None, save: bool) -> None:
+    domains = [
+        line.strip()
+        for line in domains_file.read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if not domains:
+        raise typer.BadParameter(f"{domains_file} contains no domains")
+
+    async def run_all() -> list[tuple[Site, list[Finding]]]:
+        gate = asyncio.Semaphore(MAX_PARALLEL_SITES)
+
+        async def one(entry: str) -> tuple[Site, list[Finding]]:
+            async with gate:
+                return await run_audit(entry)
+
+        return list(await asyncio.gather(*(one(entry) for entry in domains)))
+
+    results = []
+    for site, findings in asyncio.run(run_all()):
+        card = score(findings)
+        results.append((site.domain, findings, card))
+        if save:
+            history.save_run(site.domain, report.payload(site.domain, findings, card))
+    results.sort(key=lambda item: item[2].today.percent or 0, reverse=True)
+
+    if json_out:
+        batch = [report.payload(domain, findings, card) for domain, findings, card in results]
+        typer.echo(json.dumps(batch, indent=2, ensure_ascii=False))
+    else:
+        width = max(len(domain) for domain, _, _ in results)
+        typer.echo(f"rank  {'domain'.ljust(width)}  today  future  fixes")
+        for rank, (domain, findings, card) in enumerate(results, start=1):
+            fixes = sum(1 for f in findings if f.fix and f.status.value in ("warn", "fail"))
+            today = card.today.percent if card.today.percent is not None else "-"
+            future = card.future.percent if card.future.percent is not None else "-"
+            typer.echo(
+                f"{str(rank).ljust(4)}  {domain.ljust(width)}  {str(today).ljust(5)}  {str(future).ljust(6)}  {fixes}"
+            )
+
+    if min_score is not None:
+        failing = [
+            domain
+            for domain, _, card in results
+            if (card.today.percent or 0) < min_score
+        ]
+        if failing:
+            typer.echo(f"Below --min-score {min_score}: {', '.join(failing)}", err=True)
+            raise typer.Exit(1)
+
+
+@app.command()
+def diff(
+    domain: str = typer.Argument(..., help="Domain with at least two recorded audits"),
+) -> None:
+    """Compare the two most recent recorded audits of a domain."""
+    key = httpx.URL(normalize_base_url(domain)).host
+    runs = history.load_runs(key, limit=2)
+    if len(runs) < 2:
+        typer.echo(
+            f"Need two recorded runs for {key}, found {len(runs)} — run `beacon audit {key}` (history saves automatically)",
+            err=True,
+        )
+        raise typer.Exit(2)
+    typer.echo(history.diff_runs(runs[0], runs[1]))
 
 
 @generate_app.command("llms-txt")

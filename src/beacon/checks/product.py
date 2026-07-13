@@ -8,6 +8,7 @@ INFO finding — absence of a catalog must never hurt their score.
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 from selectolax.parser import HTMLParser
@@ -51,8 +52,21 @@ class ProductCheck:
                 )
             ]
 
-        product = _first_product(HTMLParser(response.text))
+        tree = HTMLParser(response.text)
+        product = _first_product(tree)
         if product is None:
+            if not _looks_like_commerce(tree):
+                return [
+                    Finding(
+                        id="product-markup",
+                        layer=self.layer,
+                        tier=Tier.TODAY,
+                        status=Status.INFO,
+                        weight=0,
+                        summary="A /product/ page was found but shows no commerce signals (cart, buy, prices) — treated as marketing, not scored",
+                        evidence=product_url,
+                    )
+                ]
             return [
                 Finding(
                     id="product-markup",
@@ -110,6 +124,16 @@ class ProductCheck:
             if any(hint in path for hint in PRODUCT_PATH_HINTS) and path.rstrip("/").count("/") >= 2:
                 return url
         return None
+
+
+_COMMERCE_PATTERN = re.compile(
+    r"add to (?:cart|bag|basket)|buy now|checkout|[$€£]\s?\d", re.IGNORECASE
+)
+
+
+def _looks_like_commerce(tree: HTMLParser) -> bool:
+    body = tree.body
+    return body is not None and bool(_COMMERCE_PATTERN.search(body.text(separator=" ")))
 
 
 def _first_product(tree: HTMLParser) -> dict | None:

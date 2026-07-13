@@ -95,9 +95,27 @@ async def test_product_without_offer_facts_warns():
 
 
 @respx.mock
-async def test_product_page_without_jsonld_fails():
-    finding = await run_check(None)
+async def test_commerce_page_without_jsonld_fails():
+    respx.get(f"{BASE}/robots.txt").respond(200, text=f"Sitemap: {BASE}/sitemap.xml\n")
+    respx.get(f"{BASE}/sitemap.xml").respond(200, text=SITEMAP)
+    respx.get(f"{BASE}/products/widget").respond(
+        200,
+        text="<html><body><main><h1>Widget</h1><p>$19.99</p><button>Add to cart</button></main></body></html>",
+        headers={"content-type": "text/html"},
+    )
+    respx.get(url__startswith=BASE).respond(404)
+    site = make_site()
+    (finding,) = await ProductCheck().run(site)
+    await site.aclose()
     assert finding.status is Status.FAIL
+
+
+@respx.mock
+async def test_marketing_product_page_is_unscored():
+    finding = await run_check(None)  # /products/widget page with no commerce signals
+    assert finding.status is Status.INFO
+    assert finding.weight == 0
+    assert "marketing" in finding.summary
 
 
 @respx.mock
