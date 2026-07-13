@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import typer
 
@@ -10,9 +11,12 @@ from agentready import report
 from agentready.checks import ALL_CHECKS
 from agentready.checks.base import Finding
 from agentready.fetch import Site
+from agentready.generate.llmstxt import generate_llms_txt
 from agentready.scoring import score
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
+generate_app = typer.Typer(no_args_is_help=True)
+app.add_typer(generate_app, name="generate", help="Generate missing agent-readiness pieces")
 
 
 @app.callback()
@@ -43,6 +47,28 @@ def audit(
         typer.echo(report.to_json(site.domain, findings, card))
     else:
         typer.echo(report.render_text(site.domain, findings, card))
+
+
+@generate_app.command("llms-txt")
+def llms_txt(
+    domain: str = typer.Argument(..., help="Domain or URL to generate llms.txt for"),
+    output: Path = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout"),
+) -> None:
+    """Draft an llms.txt from the site's sitemap and page metadata."""
+
+    async def run() -> str:
+        site = Site(domain)
+        try:
+            return await generate_llms_txt(site)
+        finally:
+            await site.aclose()
+
+    text = asyncio.run(run())
+    if output is not None:
+        output.write_text(text)
+        typer.echo(f"Wrote {output} — review the draft before publishing it at /llms.txt")
+    else:
+        typer.echo(text)
 
 
 if __name__ == "__main__":
