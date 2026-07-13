@@ -1,8 +1,8 @@
 import httpx
 import respx
 
-from agentready.fetch import Fetcher, Site
-from agentready.generate.llmstxt import generate_llms_txt
+from beacon.fetch import Fetcher, Site
+from beacon.generate.llmstxt import generate_llms_txt
 
 BASE = "https://shop.example"
 

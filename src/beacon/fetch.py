@@ -6,7 +6,7 @@ import asyncio
 
 import httpx
 
-USER_AGENT = "AgentReadyBot/0.1 (+https://github.com/akrvs/agentready)"
+USER_AGENT = "BeaconBot/0.1 (+https://github.com/akrvs/Beacon)"
 
 
 def normalize_base_url(domain: str) -> str:

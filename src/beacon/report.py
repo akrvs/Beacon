@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from agentready.checks.base import Finding, Layer, Status, Tier
-from agentready.scoring import ScoreCard
+from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.scoring import ScoreCard
 
 _STATUS_MARK = {
     Status.PASS: "✓ PASS",
@@ -35,8 +35,8 @@ def to_json(domain: str, findings: list[Finding], card: ScoreCard) -> str:
 
 def render_text(domain: str, findings: list[Finding], card: ScoreCard) -> str:
     lines = [
-        f"AgentReady audit — {domain}",
-        "=" * (20 + len(domain)),
+        f"Beacon audit — {domain}",
+        "=" * (15 + len(domain)),
         "",
         f"Agent visibility today : {_fmt(card.today.percent)}",
         f"Future readiness       : {_fmt(card.future.percent)}",

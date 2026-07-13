@@ -2,9 +2,9 @@ import httpx
 import pytest
 import respx
 
-from agentready.checks.base import Status, Tier
-from agentready.checks.crawl_policy import CrawlPolicyCheck, parse_robots
-from agentready.fetch import Fetcher, Site
+from beacon.checks.base import Status, Tier
+from beacon.checks.crawl_policy import CrawlPolicyCheck, parse_robots
+from beacon.fetch import Fetcher, Site
 
 BASE = "https://shop.example"
 

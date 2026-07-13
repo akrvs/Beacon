@@ -1,4 +1,4 @@
-"""AgentReady CLI: `agentready audit <domain>`."""
+"""Beacon CLI: `beacon audit <domain>`."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from pathlib import Path
 
 import typer
 
-from agentready import report
-from agentready.checks import ALL_CHECKS
-from agentready.checks.base import Finding
-from agentready.fetch import Site
-from agentready.generate.llmstxt import generate_llms_txt
-from agentready.scoring import score
+from beacon import report
+from beacon.checks import ALL_CHECKS
+from beacon.checks.base import Finding
+from beacon.fetch import Site
+from beacon.generate.llmstxt import generate_llms_txt
+from beacon.scoring import score
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 generate_app = typer.Typer(no_args_is_help=True)
@@ -21,7 +21,7 @@ app.add_typer(generate_app, name="generate", help="Generate missing agent-readin
 
 @app.callback()
 def main() -> None:
-    """AgentReady — audit and improve a business's agent-readiness."""
+    """Beacon — audit and improve a business's agent-readiness."""
 
 
 async def run_audit(domain: str) -> tuple[Site, list[Finding]]:

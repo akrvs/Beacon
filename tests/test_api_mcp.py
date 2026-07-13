@@ -3,10 +3,10 @@ import json
 import httpx
 import respx
 
-from agentready.checks.api_mcp import ApiMcpCheck
-from agentready.checks.base import Status, Tier
-from agentready.checks.checkout import CheckoutCheck
-from agentready.fetch import Fetcher, Site
+from beacon.checks.api_mcp import ApiMcpCheck
+from beacon.checks.base import Status, Tier
+from beacon.checks.checkout import CheckoutCheck
+from beacon.fetch import Fetcher, Site
 
 BASE = "https://api.example"
 

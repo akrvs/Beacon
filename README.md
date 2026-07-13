@@ -1,10 +1,134 @@
-# AgentReady
+```
+██████╗ ███████╗ █████╗  ██████╗ ██████╗ ███╗   ██╗
+██╔══██╗██╔════╝██╔══██╗██╔════╝██╔═══██╗████╗  ██║
+██████╔╝█████╗  ███████║██║     ██║   ██║██╔██╗ ██║
+██╔══██╗██╔══╝  ██╔══██║██║     ██║   ██║██║╚██╗██║
+██████╔╝███████╗██║  ██║╚██████╗╚██████╔╝██║ ╚████║
+╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝
+                   a k r v s
+```
 
-Agent-readiness audit & MCP layer for businesses.
+> AI agents are already browsing, buying, and booking — and most sites are
+> invisible to them. Beacon points at any domain, reads it the way an agent
+> does, and hands back a scored report: what agents can see today, what
+> they'll expect tomorrow, and the exact fixes in between. Then it forges the
+> missing pieces itself. SEO was for crawlers. This is for the machines that
+> act.
 
-Scans a business's web presence/API and scores how usable it is by AI agents
-across four layers — API/MCP availability, AI-readable content, crawl policy,
-and agent checkout readiness — then generates the missing pieces (llms.txt,
-MCP server scaffold).
+![status](https://img.shields.io/badge/status-ACTIVE-brightgreen)
+![category](https://img.shields.io/badge/category-Agents%20%2F%20Discovery-9cf)
+![difficulty](https://img.shields.io/badge/difficulty-Medium-yellow)
+![python](https://img.shields.io/badge/python-3.12%2B-blue)
+![tests](https://img.shields.io/badge/tests-19%20passing-brightgreen)
 
-Status: pre-MVP, architecture under discussion.
+```
+┌─[ TARGET ]──────────────────────────────────────────────────┐
+│ codename   : beacon                                         │
+│ category   : Agent Readiness / Audit & Generation           │
+│ difficulty : Medium                                         │
+│ stack      : Python 3.12 · httpx · selectolax · Typer       │
+│ layers     : crawl policy · content · api/mcp · checkout    │
+│ flags      : user [audit + llms.txt]   root [MCP scaffold]  │
+│ status     : USER OWNED — root flag in progress             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## [ Briefing ]
+
+Beacon audits a business's web presence for **agent-readiness** and generates
+what's missing. The honest part: most "agent standards" (llms.txt, MCP
+discovery, UCP/ACP/AP2) have close to zero confirmed consumption today. So
+Beacon scores in two tiers and never mixes them:
+
+- **Agent visibility today** — signals real agents actually use right now:
+  robots.txt rules for live AI fetchers, schema.org JSON-LD, server-rendered
+  text, labeled forms. This drives the headline score.
+- **Future readiness** — llms.txt, MCP endpoints, agentic-commerce protocol
+  signals. Reported separately, so unproven specs never inflate (or tank) the
+  number a merchant acts on.
+
+Protocol-agnostic by construction: every audit is a plugin implementing one
+small `Check` protocol. Supporting the next protocol is one new file, not a
+refactor. No payments are built here — readiness and discovery only.
+
+## [ Recon ] — the four layers
+
+```
+crawl_policy   robots.txt AI-crawler rules (fetchers vs training bots) · sitemap
+content        JS-free text extraction · schema.org JSON-LD · metadata · landmarks · form operability
+api_mcp        llms.txt · OpenAPI discovery · MCP endpoint probes          [future tier]
+checkout       UCP / ACP / AP2 / x402 support signals                      [future tier]
+```
+
+Every finding carries a status (`PASS / WARN / FAIL / INFO`), a weight, a tier,
+and a **concrete fix** — the report is a work order, not a lecture.
+
+## [ Foothold ] — install
+
+```bash
+git clone https://github.com/akrvs/Beacon.git && cd Beacon
+uv sync --group dev
+uv run beacon --help
+```
+
+## [ User Flag ] — audit a domain
+
+```bash
+uv run beacon audit shop.example            # human report
+uv run beacon audit shop.example --json     # machine report
+```
+
+```
+Beacon audit — reddit.com
+=========================
+
+Agent visibility today : 33/100
+
+Crawl policy
+------------
+  ✓ PASS  robots.txt is present and parseable
+  ✗ FAIL  robots.txt fully blocks 8 live agent fetcher(s) — the site is invisible to those agents
+           evidence: ChatGPT-User, OAI-SearchBot, Claude-User, ...
+           fix: Unblock on-demand agent user-agents in robots.txt; ...
+```
+
+## [ Root Flag ] — generate the missing pieces
+
+```bash
+uv run beacon generate llms-txt shop.example -o llms.txt   # sitemap-driven draft
+uv run beacon generate mcp openapi.json                    # MCP server scaffold (in progress)
+```
+
+## [ Loadout ] — architecture
+
+```
+src/beacon/
+├── cli.py              audit · generate llms-txt · generate mcp
+├── fetch.py            polite client: honest UA, cached, rate-limited
+├── checks/
+│   ├── base.py         Check protocol · Finding · Tier — the plugin contract
+│   ├── crawl_policy.py RFC 9309 robots parsing, AI-agent allowlist analysis
+│   ├── content.py      what an agent's text extraction actually sees
+│   ├── api_mcp.py      llms.txt / OpenAPI / MCP discovery probes
+│   └── checkout.py     emerging commerce-protocol signals
+├── scoring.py          two-tier weighted scoring — today vs future
+├── report.py           terminal + JSON reports with fixes
+└── generate/
+    └── llmstxt.py      sitemap → curated llms.txt draft
+```
+
+## [ Rules of Engagement ]
+
+- Honest user agent (`BeaconBot/0.1`), no browser impersonation
+- Read-only GETs, response-cached, rate-limited — one polite pass per audit
+- SPA catch-alls that answer 200-HTML to everything are detected, not counted
+- Builds readiness and discovery; never touches payments
+
+## [ Loot ] — roadmap
+
+- [x] Four-layer audit with two-tier scoring
+- [x] llms.txt generator (sitemap-driven, homepage-link fallback)
+- [ ] MCP server scaffold from an OpenAPI spec
+- [ ] Product-page deep audit (Product/Offer JSON-LD, price extraction)
+- [ ] Platform-aware fixes (Shopify/Woo can't self-host MCP — say so)
+- [ ] Shareable HTML report

@@ -10,8 +10,8 @@ import json
 
 import httpx
 
-from agentready.checks.base import Finding, Layer, Status, Tier
-from agentready.fetch import Site
+from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.fetch import Site
 
 OPENAPI_PROBES = ["/openapi.json", "/swagger.json", "/api/openapi.json", "/.well-known/openapi.json"]
 MCP_PROBES = ["/.well-known/mcp.json", "/mcp"]
@@ -68,7 +68,7 @@ class ApiMcpCheck:
             status=Status.FAIL,
             weight=2,
             summary="No llms.txt — agents that look for a curated site map won't find one",
-            fix="Generate one with `agentready generate llms-txt <domain>` and serve it at /llms.txt",
+            fix="Generate one with `beacon generate llms-txt <domain>` and serve it at /llms.txt",
         )
 
     async def _openapi(self, site: Site) -> Finding:
@@ -114,5 +114,5 @@ class ApiMcpCheck:
             status=Status.FAIL,
             weight=3,
             summary="No MCP endpoint detected (/.well-known/mcp.json, /mcp)",
-            fix="Scaffold one from your OpenAPI spec with `agentready generate mcp <spec>` and advertise it at /.well-known/mcp.json",
+            fix="Scaffold one from your OpenAPI spec with `beacon generate mcp <spec>` and advertise it at /.well-known/mcp.json",
         )

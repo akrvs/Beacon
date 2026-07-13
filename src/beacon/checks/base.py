@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, runtime_checkable
 
-from agentready.fetch import Site
+from beacon.fetch import Site
 
 
 class Layer(str, Enum):

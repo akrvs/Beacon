@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agentready.checks.base import Finding, Layer, Status, Tier
+from beacon.checks.base import Finding, Layer, Status, Tier
 
 _CREDIT = {Status.PASS: 1.0, Status.WARN: 0.5, Status.FAIL: 0.0}
 

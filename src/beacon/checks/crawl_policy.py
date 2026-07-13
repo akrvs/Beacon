@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from agentready.checks.base import Finding, Layer, Status, Tier
-from agentready.fetch import Site
+from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.fetch import Site
 
 # Bots that fetch pages live on behalf of a user or agent session. Blocking
 # these makes the site invisible to agents at the moment of use.

@@ -7,8 +7,8 @@ import json
 
 from selectolax.parser import HTMLParser
 
-from agentready.checks.base import Finding, Layer, Status, Tier
-from agentready.fetch import Site
+from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.fetch import Site
 
 
 class ContentCheck:

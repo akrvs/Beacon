@@ -6,8 +6,8 @@ each one has proposed and reports honestly that absence is the norm today.
 
 from __future__ import annotations
 
-from agentready.checks.base import Finding, Layer, Status, Tier
-from agentready.fetch import Site
+from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.fetch import Site
 
 PROTOCOL_PROBES = {
     "UCP": "/.well-known/ucp.json",

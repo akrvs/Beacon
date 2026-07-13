@@ -1,5 +1,5 @@
-from agentready.checks.base import Finding, Layer, Status, Tier
-from agentready.scoring import score
+from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.scoring import score
 
 
 def finding(status, weight=1, tier=Tier.TODAY, layer=Layer.CRAWL_POLICY):

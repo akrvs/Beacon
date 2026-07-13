@@ -1,9 +1,9 @@
 import httpx
 import respx
 
-from agentready.checks.base import Status
-from agentready.checks.content import ContentCheck
-from agentready.fetch import Fetcher, Site
+from beacon.checks.base import Status
+from beacon.checks.content import ContentCheck
+from beacon.fetch import Fetcher, Site
 
 BASE = "https://shop.example"
 

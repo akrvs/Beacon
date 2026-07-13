@@ -1,5 +1,5 @@
 [project]
-name = "agentready"
+name = "beacon"
 version = "0.1.0"
 description = "Agent-readiness audit & MCP layer for businesses"
 requires-python = ">=3.12"
@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agentready = "agentready.cli:app"
+beacon = "beacon.cli:app"
 
 [dependency-groups]
 dev = [
@@ -24,7 +24,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentready"]
+packages = ["src/beacon"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
