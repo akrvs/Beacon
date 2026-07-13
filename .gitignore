@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node (if generator output is tested locally)
+node_modules/
+
+# Local artifacts
+.env
+*.log
+reports/
+.DS_Store
