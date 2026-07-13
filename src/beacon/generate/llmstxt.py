@@ -6,13 +6,13 @@ H2 sections of `- [title](url): description` links.
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
+import asyncio
 from dataclasses import dataclass
 
 import httpx
 from selectolax.parser import HTMLParser
 
-from beacon.checks.crawl_policy import parse_robots
+from beacon.discover import homepage_links, sitemap_urls
 from beacon.fetch import Site
 
 MAX_PAGES = 20
@@ -31,12 +31,9 @@ async def generate_llms_txt(site: Site) -> str:
     site_title, site_description = _title_and_description(homepage)
     site_title = site_title or site.domain
 
-    urls = await _sitemap_urls(site) or _homepage_links(site, homepage)
-    pages = []
-    for url in urls[:MAX_PAGES]:
-        page = await _describe(site, url)
-        if page:
-            pages.append(page)
+    urls = await sitemap_urls(site) or homepage_links(site, homepage)
+    described = await asyncio.gather(*(_describe(site, url) for url in urls[:MAX_PAGES]))
+    pages = [page for page in described if page is not None]
 
     lines = [f"# {site_title}", ""]
     if site_description:
@@ -66,59 +63,6 @@ def _title_and_description(response: httpx.Response | None) -> tuple[str, str]:
     meta = tree.css_first('meta[name="description"]')
     description = (meta.attributes.get("content") or "").strip() if meta else ""
     return title, description
-
-
-async def _sitemap_urls(site: Site) -> list[str]:
-    robots_text = await site.robots_txt()
-    candidates = parse_robots(robots_text).sitemaps if robots_text else []
-    candidates.append(site.fetcher.url_for("/sitemap.xml"))
-    for sitemap_url in candidates:
-        response = await site.get(sitemap_url)
-        if response is None or response.status_code != 200:
-            continue
-        try:
-            root = ET.fromstring(response.text)
-        except ET.ParseError:
-            continue
-        namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-        if root.tag.endswith("sitemapindex"):
-            nested = [node.text for node in root.findall("sm:sitemap/sm:loc", namespace) if node.text]
-            for child_url in nested[:2]:
-                child_urls = await _fetch_urlset(site, child_url)
-                if child_urls:
-                    return child_urls
-            continue
-        urls = [node.text for node in root.findall("sm:url/sm:loc", namespace) if node.text]
-        if urls:
-            return urls
-    return []
-
-
-async def _fetch_urlset(site: Site, sitemap_url: str) -> list[str]:
-    response = await site.get(sitemap_url)
-    if response is None or response.status_code != 200:
-        return []
-    try:
-        root = ET.fromstring(response.text)
-    except ET.ParseError:
-        return []
-    namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-    return [node.text for node in root.findall("sm:url/sm:loc", namespace) if node.text]
-
-
-def _homepage_links(site: Site, homepage: httpx.Response | None) -> list[str]:
-    if homepage is None or homepage.status_code >= 400:
-        return []
-    tree = HTMLParser(homepage.text)
-    seen: dict[str, None] = {}
-    for anchor in tree.css("a[href]"):
-        href = (anchor.attributes.get("href") or "").split("#")[0]
-        if not href or href.startswith(("mailto:", "tel:", "javascript:")):
-            continue
-        url = str(httpx.URL(site.base_url).join(href))
-        if httpx.URL(url).host == site.domain:
-            seen[url] = None
-    return list(seen)
 
 
 async def _describe(site: Site, url: str) -> Page | None:

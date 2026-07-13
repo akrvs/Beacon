@@ -13,6 +13,7 @@ import httpx
 
 from beacon.checks.base import Finding, Layer, Status, Tier
 from beacon.fetch import Site
+from beacon.platform import HOSTED_PLATFORMS, detect_platform
 
 OPENAPI_PROBES = ["/openapi.json", "/swagger.json", "/api/openapi.json", "/.well-known/openapi.json"]
 MCP_PROBES = ["/.well-known/mcp.json", "/mcp"]
@@ -44,9 +45,25 @@ class ApiMcpCheck:
     layer = Layer.API_MCP
 
     async def run(self, site: Site) -> list[Finding]:
-        return list(
-            await asyncio.gather(self._llms_txt(site), self._openapi(site), self._mcp(site))
+        platform = await detect_platform(site)
+        findings = list(
+            await asyncio.gather(
+                self._llms_txt(site), self._openapi(site), self._mcp(site, platform)
+            )
         )
+        if platform is not None:
+            findings.insert(
+                0,
+                Finding(
+                    id="platform-detected",
+                    layer=self.layer,
+                    tier=Tier.FUTURE,
+                    status=Status.INFO,
+                    weight=0,
+                    summary=f"Platform detected: {platform} — fixes below account for what {platform} merchants can actually change",
+                ),
+            )
+        return findings
 
     async def _llms_txt(self, site: Site) -> Finding:
         response = await site.get("/llms.txt")
@@ -95,7 +112,7 @@ class ApiMcpCheck:
             fix="Publish your API spec at /openapi.json; it is also the input for MCP server generation",
         )
 
-    async def _mcp(self, site: Site) -> Finding:
+    async def _mcp(self, site: Site, platform: str | None = None) -> Finding:
         responses = await asyncio.gather(*(site.get(path) for path in MCP_PROBES))
         for path, response in zip(MCP_PROBES, responses):
             if _is_real_text(response):
@@ -108,6 +125,13 @@ class ApiMcpCheck:
                     summary="An MCP discovery endpoint responds — agents can connect via tools instead of scraping",
                     evidence=site.fetcher.url_for(path),
                 )
+        if platform in HOSTED_PLATFORMS:
+            fix = (
+                f"{platform} controls your storefront's origin, so you can't self-host an MCP endpoint — "
+                f"publish llms.txt instead and adopt {platform}'s native agent/MCP support when it ships"
+            )
+        else:
+            fix = "Scaffold one from your OpenAPI spec with `beacon generate mcp <spec>` and advertise it at /.well-known/mcp.json"
         return Finding(
             id="mcp-endpoint",
             layer=self.layer,
@@ -115,5 +139,5 @@ class ApiMcpCheck:
             status=Status.FAIL,
             weight=3,
             summary="No MCP endpoint detected (/.well-known/mcp.json, /mcp)",
-            fix="Scaffold one from your OpenAPI spec with `beacon generate mcp <spec>` and advertise it at /.well-known/mcp.json",
+            fix=fix,
         )
