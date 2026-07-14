@@ -134,6 +134,33 @@ def _audit_batch(domains_file: Path, *, json_out: bool, min_score: int | None, s
 
 
 @app.command()
+def simulate(
+    domain: str = typer.Argument(..., help="Domain to test with a simulated agent"),
+    model: str = typer.Option("claude-opus-4-8", "--model", help="Claude model to simulate with"),
+) -> None:
+    """Have Claude attempt real customer tasks using only what an agent can extract from the site."""
+    try:
+        import anthropic
+    except ImportError:
+        typer.echo(
+            "The simulate command needs the AI extra: uv sync --extra ai (and Anthropic API credentials)",
+            err=True,
+        )
+        raise typer.Exit(2)
+    from beacon.simulate import simulate_domain
+
+    no_credentials = (
+        "No valid Anthropic credentials — set ANTHROPIC_API_KEY or run `ant auth login`"
+    )
+    client = anthropic.Anthropic()
+    try:
+        typer.echo(simulate_domain(domain, client, model))
+    except (TypeError, anthropic.AuthenticationError):
+        typer.echo(no_credentials, err=True)
+        raise typer.Exit(2)
+
+
+@app.command()
 def diff(
     domain: str = typer.Argument(..., help="Domain with at least two recorded audits"),
 ) -> None:

@@ -19,7 +19,7 @@
 ![category](https://img.shields.io/badge/category-Agents%20%2F%20Discovery-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Medium-yellow)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-31%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-43%20passing-brightgreen)
 
 ```
 ┌─[ TARGET ]──────────────────────────────────────────────────┐
@@ -79,6 +79,8 @@ uv run beacon audit shop.example                    # human report
 uv run beacon audit shop.example --json             # machine report
 uv run beacon audit shop.example --html report.html # shareable HTML report
 uv run beacon audit shop.example --min-score 70     # CI gate: exit 1 below threshold
+uv run beacon audit --file domains.txt              # batch audit → ranking table
+uv run beacon diff shop.example                     # what changed since the last audit
 ```
 
 ```
@@ -102,6 +104,21 @@ uv run beacon generate llms-txt shop.example -o llms.txt   # sitemap-driven draf
 uv run beacon generate mcp openapi.json                    # runnable MCP server scaffold
 ```
 
+## [ Oracle ] — simulate an agent
+
+The audit checks signals; the oracle checks reality. `beacon simulate` fetches
+the site exactly as a text agent sees it (server-rendered HTML, no JavaScript),
+hands that text to Claude, and asks it to complete real customer tasks — what
+does this business sell, find a price and availability, figure out how to buy.
+You get per-task verdicts, an extraction score, and the concrete information
+the site fails to expose. Evidence a merchant can't argue with.
+
+```bash
+uv sync --extra ai                        # optional AI layer (anthropic SDK)
+export ANTHROPIC_API_KEY=sk-ant-...
+uv run beacon simulate shop.example
+```
+
 ## [ Loadout ] — architecture
 
 ```
@@ -119,6 +136,8 @@ src/beacon/
 │   └── checkout.py     emerging commerce-protocol signals
 ├── scoring.py          two-tier weighted scoring — today vs future
 ├── report.py           terminal · JSON · self-contained HTML reports
+├── history.py          per-domain run history → `beacon diff`
+├── simulate.py         Claude-driven agent dry-run (optional `ai` extra)
 └── generate/
     ├── llmstxt.py      sitemap → curated llms.txt draft
     └── mcp_scaffold.py OpenAPI spec → runnable FastMCP server project
@@ -139,7 +158,11 @@ src/beacon/
 - [x] Product-page deep audit (Product/Offer JSON-LD, price extraction)
 - [x] Platform-aware fixes (Shopify/Woo can't self-host MCP — say so)
 - [x] Shareable HTML report (--html) and CI gate (--min-score)
-- [ ] Batch audits (`beacon audit --file domains.txt`) with a ranking table
-- [ ] Score history: store JSON runs, `beacon diff` between audits
-- [ ] YAML OpenAPI specs + auth-aware MCP scaffolds
-- [ ] Agentic-discovery sitemap check (Shopify now ships sitemap_agentic_discovery.xml)
+- [x] Batch audits (`beacon audit --file domains.txt`) with a ranking table
+- [x] Score history: store JSON runs, `beacon diff` between audits
+- [x] YAML OpenAPI specs; HTTP/2 + tighter timeouts
+- [x] Agentic-discovery sitemap check (Shopify ships sitemap_agentic_discovery.xml)
+- [x] Simulated agent task-completion (`beacon simulate`, Claude-powered)
+- [ ] Auth-aware MCP scaffolds (OpenAPI securitySchemes → real auth wiring)
+- [ ] Watch mode: scheduled re-audits + notify on score changes
+- [ ] Competitor benchmarking report (batch + HTML, ranked side-by-side)
