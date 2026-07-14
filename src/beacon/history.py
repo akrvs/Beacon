@@ -38,39 +38,67 @@ def load_runs(domain: str, limit: int = 2) -> list[dict]:
     return [json.loads(path.read_text()) for path in files]
 
 
-def diff_runs(old: dict, new: dict) -> str:
-    lines = [
-        f"Beacon diff — {new.get('domain', '?')}",
-        f"{old.get('audited_at', '?')}  →  {new.get('audited_at', '?')}",
-        "",
-        _score_line("Agent visibility today", old.get("score_today"), new.get("score_today")),
-        _score_line("Future readiness      ", old.get("score_future"), new.get("score_future")),
-    ]
+def change_summary(old: dict, new: dict) -> dict:
+    """Machine-readable changes between two runs (drives diff_runs and watch mode)."""
     old_findings = {f["id"]: f for f in old.get("findings", [])}
     new_findings = {f["id"]: f for f in new.get("findings", [])}
-
     changed = [
-        (fid, old_findings[fid]["status"], finding["status"], finding["summary"])
+        {
+            "id": fid,
+            "before": old_findings[fid]["status"],
+            "after": finding["status"],
+            "summary": finding["summary"],
+        }
         for fid, finding in new_findings.items()
         if fid in old_findings and old_findings[fid]["status"] != finding["status"]
     ]
     added = [f for fid, f in new_findings.items() if fid not in old_findings]
     removed = [f for fid, f in old_findings.items() if fid not in new_findings]
+    return {
+        "domain": new.get("domain"),
+        "from": old.get("audited_at"),
+        "to": new.get("audited_at"),
+        "score_today": {"old": old.get("score_today"), "new": new.get("score_today")},
+        "score_future": {"old": old.get("score_future"), "new": new.get("score_future")},
+        "changed": changed,
+        "added": added,
+        "removed": removed,
+        "has_changes": bool(changed or added or removed)
+        or old.get("score_today") != new.get("score_today")
+        or old.get("score_future") != new.get("score_future"),
+    }
 
-    if changed:
+
+def diff_runs(old: dict, new: dict) -> str:
+    summary = change_summary(old, new)
+    lines = [
+        f"Beacon diff — {summary['domain'] or '?'}",
+        f"{summary['from'] or '?'}  →  {summary['to'] or '?'}",
+        "",
+        _score_line(
+            "Agent visibility today", summary["score_today"]["old"], summary["score_today"]["new"]
+        ),
+        _score_line(
+            "Future readiness      ", summary["score_future"]["old"], summary["score_future"]["new"]
+        ),
+    ]
+    if summary["changed"]:
         lines.append("")
         lines.append("Changed:")
-        for fid, before, after, summary in changed:
-            lines.append(f"  {fid}: {before.upper()} → {after.upper()}  {summary}")
-    if added:
+        for change in summary["changed"]:
+            lines.append(
+                f"  {change['id']}: {change['before'].upper()} → {change['after'].upper()}"
+                f"  {change['summary']}"
+            )
+    if summary["added"]:
         lines.append("")
         lines.append("New checks:")
-        lines += [f"  + {f['id']} [{f['status']}]" for f in added]
-    if removed:
+        lines += [f"  + {f['id']} [{f['status']}]" for f in summary["added"]]
+    if summary["removed"]:
         lines.append("")
         lines.append("Removed checks:")
-        lines += [f"  - {f['id']} [was {f['status']}]" for f in removed]
-    if not (changed or added or removed):
+        lines += [f"  - {f['id']} [was {f['status']}]" for f in summary["removed"]]
+    if not (summary["changed"] or summary["added"] or summary["removed"]):
         lines += ["", "No finding changes between runs."]
     return "\n".join(lines)
 

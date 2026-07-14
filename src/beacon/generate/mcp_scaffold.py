@@ -1,14 +1,16 @@
 """Generate a runnable MCP server scaffold from an OpenAPI (JSON) spec.
 
 Emits one MCP tool per operation, forwarding to the business's existing API.
-The output is a reviewable starting point, not a finished product: auth, rate
-limits, and which operations to expose are decisions the owner must make.
+Auth is wired from the spec's `securitySchemes` (apiKey, HTTP bearer/basic,
+OAuth2 access tokens) as environment variables. The output is a reviewable
+starting point, not a finished product: rate limits, token refresh, and which
+operations to expose are decisions the owner must make.
 """
 
 from __future__ import annotations
 
-import json
 import re
+from dataclasses import dataclass
 
 MAX_TOOLS = 40
 
@@ -46,19 +48,166 @@ def scaffold_mcp_server(spec: dict, server_name: str | None = None) -> dict[str,
                 _render_tool(method, path, operation, shared_params, used_names)
             )
 
+    auth = _build_auth(spec)
     server_py = _SERVER_TEMPLATE.format(
         name=name,
         base_url=base_url,
         tool_count=len(tools),
         tools="\n\n".join(tools),
+        extra_imports=auth.imports,
+        env_block=auth.env_block,
+        auth_body=auth.body,
     )
     return {
         "server.py": server_py,
         "pyproject.toml": _PYPROJECT_TEMPLATE.format(name=name),
         "README.md": _README_TEMPLATE.format(
-            name=name, title=info.get("title", name), tool_count=len(tools)
+            name=name,
+            title=info.get("title", name),
+            tool_count=len(tools),
+            auth_section=auth.readme,
+            env_exports=" ".join(f"{var}=..." for var in auth.env_vars),
+            env_json=", ".join(f'"{var}": "..."' for var in auth.env_vars),
         ),
     }
+
+
+@dataclass
+class _Auth:
+    imports: str
+    env_block: str
+    body: str
+    readme: str
+    env_vars: list[str]
+
+
+def _referenced_schemes(spec: dict) -> dict[str, dict]:
+    """Security schemes referenced by the spec (all defined ones if none are referenced)."""
+    defined = {
+        scheme_name: scheme
+        for scheme_name, scheme in (
+            ((spec.get("components") or {}).get("securitySchemes") or {}).items()
+        )
+        if isinstance(scheme, dict)
+    }
+    referenced: set[str] = set()
+    security_blocks = list(spec.get("security") or [])
+    for path_item in (spec.get("paths") or {}).values():
+        if not isinstance(path_item, dict):
+            continue
+        for method in _METHODS:
+            operation = path_item.get(method)
+            if isinstance(operation, dict):
+                security_blocks += list(operation.get("security") or [])
+    for requirement in security_blocks:
+        if isinstance(requirement, dict):
+            referenced.update(requirement)
+    picked = {name: scheme for name, scheme in defined.items() if name in referenced}
+    return picked or defined
+
+
+def _build_auth(spec: dict) -> _Auth:
+    schemes = _referenced_schemes(spec)
+    if not schemes:
+        return _Auth(
+            imports="",
+            env_block=(
+                'API_KEY = os.environ.get("API_KEY", "")'
+                "  # spec declares no securitySchemes; generic bearer stub"
+            ),
+            body=(
+                '    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}\n'
+                "    return headers, {}"
+            ),
+            readme=(
+                "The spec declares no `securitySchemes`, so the scaffold ships a generic\n"
+                "`API_KEY` bearer stub — replace `_auth()` with your real auth."
+            ),
+            env_vars=["API_KEY"],
+        )
+
+    env_lines: list[str] = []
+    body: list[str] = []
+    readme_rows: list[str] = []
+    env_vars: list[str] = []
+    needs_base64 = False
+    used_env: set[str] = set()
+
+    def declare(var: str, comment: str) -> str:
+        var = _unique(var, used_env)
+        env_lines.append(f'{var} = os.environ.get("{var}", "")  # {comment}')
+        env_vars.append(var)
+        return var
+
+    for scheme_name, scheme in schemes.items():
+        base = _slug(scheme_name).upper() or "AUTH"
+        scheme_type = (scheme.get("type") or "").lower()
+        if scheme_type == "apikey":
+            param = scheme.get("name") or "X-API-Key"
+            location = scheme.get("in") or "header"
+            var = declare(base, f"{scheme_name}: apiKey in {location} '{param}'")
+            body.append(f"    if {var}:")
+            if location == "query":
+                body.append(f'        params["{param}"] = {var}')
+            elif location == "cookie":
+                body.append(f'        headers["Cookie"] = f"{param}={{{var}}}"')
+            else:
+                body.append(f'        headers["{param}"] = {var}')
+            readme_rows.append(f"- `{var}` — API key sent as {location} `{param}` ({scheme_name}).")
+        elif scheme_type == "http" and (scheme.get("scheme") or "").lower() == "basic":
+            user_var = declare(f"{base}_USERNAME", f"{scheme_name}: HTTP basic")
+            pass_var = declare(f"{base}_PASSWORD", f"{scheme_name}: HTTP basic")
+            body += [
+                f"    if {user_var}:",
+                f'        credentials = base64.b64encode(f"{{{user_var}}}:{{{pass_var}}}".encode()).decode()',
+                '        headers["Authorization"] = f"Basic {credentials}"',
+            ]
+            needs_base64 = True
+            readme_rows.append(
+                f"- `{user_var}` / `{pass_var}` — HTTP basic credentials ({scheme_name})."
+            )
+        elif scheme_type == "http":
+            http_scheme = scheme.get("scheme") or "bearer"
+            prefix = "Bearer" if http_scheme.lower() == "bearer" else http_scheme
+            var = declare(f"{base}_TOKEN", f"{scheme_name}: HTTP {http_scheme}")
+            body += [
+                f"    if {var}:",
+                f'        headers["Authorization"] = f"{prefix} {{{var}}}"',
+            ]
+            readme_rows.append(f"- `{var}` — HTTP {http_scheme} token ({scheme_name}).")
+        elif scheme_type in ("oauth2", "openidconnect"):
+            var = declare(f"{base}_TOKEN", f"{scheme_name}: {scheme_type} access token")
+            body += [
+                f"    if {var}:",
+                f'        headers["Authorization"] = f"Bearer {{{var}}}"',
+            ]
+            readme_rows.append(
+                f"- `{var}` — OAuth access token ({scheme_name}); obtaining and refreshing "
+                "it is outside this server, which only sends it as a bearer token."
+            )
+        else:
+            body.append(
+                f"    # TODO: security scheme '{scheme_name}' "
+                f"(type {scheme_type or 'unknown'}) needs manual wiring"
+            )
+            readme_rows.append(
+                f"- `{scheme_name}` (type `{scheme_type or 'unknown'}`) is not auto-wired — "
+                "add it to `_auth()` yourself."
+            )
+
+    body.append("    return headers, params")
+    return _Auth(
+        imports="import base64\n" if needs_base64 else "",
+        env_block="\n".join(env_lines),
+        body="\n".join(
+            ["    headers: dict[str, str] = {}", "    params: dict[str, str] = {}", *body]
+        ),
+        readme=(
+            "Auth is wired from the spec's `securitySchemes`. Set the variable(s) for\n"
+            "the scheme your API actually uses:\n\n" + "\n".join(readme_rows)
+        ),
+        env_vars=env_vars,
+    )
 
 
 def _render_tool(
@@ -162,10 +311,11 @@ def _unique(name: str, used: set[str]) -> str:
 _SERVER_TEMPLATE = '''"""MCP server for {name} — generated by Beacon from an OpenAPI spec.
 
 {tool_count} tool(s) forwarding to the API at API_BASE_URL. Review before
-deploying: remove tools you don't want agents to call, and wire in real auth.
+deploying: remove tools you don't want agents to call, and check that
+`_auth()` matches how your API actually issues credentials.
 """
 
-import os
+{extra_imports}import os
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -173,12 +323,18 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("{name}")
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "{base_url}")
-API_KEY = os.environ.get("API_KEY", "")
+{env_block}
+
+
+def _auth() -> tuple[dict, dict]:
+    """Auth headers and query params from the spec's security schemes."""
+{auth_body}
 
 
 async def _request(method: str, path: str, params: dict | None = None, json_body: dict | None = None) -> str:
-    headers = {{"Authorization": f"Bearer {{API_KEY}}"}} if API_KEY else {{}}
+    headers, auth_params = _auth()
     params = {{key: value for key, value in (params or {{}}).items() if value is not None}}
+    params.update(auth_params)
     async with httpx.AsyncClient(base_url=API_BASE_URL, headers=headers, timeout=30.0) as client:
         response = await client.request(method, path, params=params, json=json_body)
         response.raise_for_status()
@@ -209,8 +365,12 @@ wrapping your existing API so MCP-speaking agents can call it directly.
 
 ```bash
 uv sync
-API_BASE_URL=https://your-api.example API_KEY=... uv run python server.py
+API_BASE_URL=https://your-api.example {env_exports} uv run python server.py
 ```
+
+## Auth
+
+{auth_section}
 
 ## Connect from Claude (or any MCP client)
 
@@ -220,7 +380,7 @@ API_BASE_URL=https://your-api.example API_KEY=... uv run python server.py
     "{name}": {{
       "command": "uv",
       "args": ["run", "--directory", "/path/to/this/dir", "python", "server.py"],
-      "env": {{"API_BASE_URL": "https://your-api.example", "API_KEY": "..."}}
+      "env": {{"API_BASE_URL": "https://your-api.example", {env_json}}}
     }}
   }}
 }}
@@ -229,6 +389,7 @@ API_BASE_URL=https://your-api.example API_KEY=... uv run python server.py
 ## Before you ship it
 
 - Delete tools you don't want agents to call (especially writes).
-- Replace the bearer-token stub with your real auth.
+- Check `_auth()` — the env-var wiring covers the spec's schemes, but token
+  refresh and OAuth flows are yours to implement.
 - Add input validation for anything destructive.
 """

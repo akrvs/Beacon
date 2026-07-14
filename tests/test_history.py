@@ -45,6 +45,18 @@ def test_diff_reports_score_and_status_changes():
     assert "robots-txt-present" not in text.replace("- legacy", "")  # unchanged is silent
 
 
+def test_change_summary_flags_changes():
+    old = run_payload(50, [{"id": "a", "status": "fail", "summary": "s"}])
+    new = run_payload(70, [{"id": "a", "status": "pass", "summary": "s"}])
+    summary = history.change_summary(old, new)
+    assert summary["has_changes"] is True
+    assert summary["score_today"] == {"old": 50, "new": 70}
+    assert summary["changed"] == [{"id": "a", "before": "fail", "after": "pass", "summary": "s"}]
+
+    same = run_payload(50, [{"id": "a", "status": "pass", "summary": "s"}])
+    assert history.change_summary(same, same)["has_changes"] is False
+
+
 def test_diff_no_changes():
     payload = run_payload(50, [{"id": "a", "status": "pass", "summary": "s"}])
     assert "No finding changes" in history.diff_runs(payload, payload)

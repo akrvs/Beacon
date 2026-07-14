@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -44,7 +47,11 @@ def audit(
         None, "--file", "-f", help="Audit every domain in this file (one per line) and print a ranking"
     ),
     json_out: bool = typer.Option(False, "--json", help="Emit the report as JSON"),
-    html: Path = typer.Option(None, "--html", help="Also write a shareable HTML report to this path"),
+    html: Path = typer.Option(
+        None,
+        "--html",
+        help="Also write a shareable HTML report (a ranked benchmark when used with --file)",
+    ),
     min_score: int = typer.Option(
         None,
         "--min-score",
@@ -58,9 +65,7 @@ def audit(
     if (domain is None) == (domains_file is None):
         raise typer.BadParameter("Provide either DOMAIN or --file, not both")
     if domains_file is not None:
-        if html is not None:
-            raise typer.BadParameter("--html applies to single-domain audits only")
-        _audit_batch(domains_file, json_out=json_out, min_score=min_score, save=save)
+        _audit_batch(domains_file, json_out=json_out, min_score=min_score, save=save, html=html)
         return
 
     site, findings = asyncio.run(run_audit(domain))
@@ -82,7 +87,7 @@ def audit(
 MAX_PARALLEL_SITES = 4
 
 
-def _audit_batch(domains_file: Path, *, json_out: bool, min_score: int | None, save: bool) -> None:
+def _read_domains(domains_file: Path) -> list[str]:
     domains = [
         line.strip()
         for line in domains_file.read_text().splitlines()
@@ -90,7 +95,10 @@ def _audit_batch(domains_file: Path, *, json_out: bool, min_score: int | None, s
     ]
     if not domains:
         raise typer.BadParameter(f"{domains_file} contains no domains")
+    return domains
 
+
+def _run_audits(domains: list[str]) -> list[tuple[Site, list[Finding]]]:
     async def run_all() -> list[tuple[Site, list[Finding]]]:
         gate = asyncio.Semaphore(MAX_PARALLEL_SITES)
 
@@ -100,13 +108,24 @@ def _audit_batch(domains_file: Path, *, json_out: bool, min_score: int | None, s
 
         return list(await asyncio.gather(*(one(entry) for entry in domains)))
 
+    return asyncio.run(run_all())
+
+
+def _audit_batch(
+    domains_file: Path, *, json_out: bool, min_score: int | None, save: bool, html: Path | None
+) -> None:
+    domains = _read_domains(domains_file)
     results = []
-    for site, findings in asyncio.run(run_all()):
+    for site, findings in _run_audits(domains):
         card = score(findings)
         results.append((site.domain, findings, card))
         if save:
             history.save_run(site.domain, report.payload(site.domain, findings, card))
     results.sort(key=lambda item: item[2].today.percent or 0, reverse=True)
+
+    if html is not None:
+        html.write_text(report.render_benchmark_html(results))
+        typer.echo(f"Benchmark HTML written to {html}", err=json_out)
 
     if json_out:
         batch = [report.payload(domain, findings, card) for domain, findings, card in results]
@@ -174,6 +193,85 @@ def diff(
         )
         raise typer.Exit(2)
     typer.echo(history.diff_runs(runs[0], runs[1]))
+
+
+_INTERVAL_UNITS = {"": 60, "s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def _parse_interval(text: str) -> float:
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([smhd]?)", text.strip().lower())
+    if not match:
+        raise typer.BadParameter(f"Can't parse interval {text!r} — use e.g. 45m, 6h, 1d")
+    return float(match[1]) * _INTERVAL_UNITS[match[2]]
+
+
+@app.command()
+def watch(
+    domain: str = typer.Argument(None, help="Domain or URL to re-audit on a schedule"),
+    domains_file: Path = typer.Option(
+        None, "--file", "-f", help="Watch every domain in this file (one per line)"
+    ),
+    interval: str = typer.Option(
+        "6h", "--interval", "-i", help="Time between audits: 30m, 6h, 1d (bare number = minutes)"
+    ),
+    once: bool = typer.Option(
+        False, "--once", help="Run one cycle and exit; exit code 3 if anything changed (for cron/CI)"
+    ),
+    webhook: str = typer.Option(
+        None, "--webhook", help="POST a JSON change notification to this URL when a domain changes"
+    ),
+) -> None:
+    """Re-audit on a schedule and report what changed since the previous recorded run."""
+    if (domain is None) == (domains_file is None):
+        raise typer.BadParameter("Provide either DOMAIN or --file, not both")
+    domains = _read_domains(domains_file) if domains_file is not None else [domain]
+    seconds = _parse_interval(interval)
+
+    while True:
+        any_changes = _watch_cycle(domains, webhook)
+        if once:
+            raise typer.Exit(3 if any_changes else 0)
+        typer.echo(f"Next audit in {interval} — Ctrl-C to stop.")
+        try:
+            time.sleep(seconds)
+        except KeyboardInterrupt:
+            typer.echo("Watch stopped.")
+            return
+
+
+def _watch_cycle(domains: list[str], webhook: str | None) -> bool:
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    any_changes = False
+    for site, findings in _run_audits(domains):
+        card = score(findings)
+        previous = history.load_runs(site.domain, limit=1)
+        current = report.payload(site.domain, findings, card)
+        history.save_run(site.domain, current)
+        today = card.today.percent if card.today.percent is not None else "n/a"
+        if not previous:
+            typer.echo(f"[{stamp}] {site.domain}: baseline recorded (today {today})")
+            continue
+        summary = history.change_summary(previous[0], current)
+        if not summary["has_changes"]:
+            typer.echo(f"[{stamp}] {site.domain}: no changes (today {today})")
+            continue
+        any_changes = True
+        diff_text = history.diff_runs(previous[0], current)
+        typer.echo(f"[{stamp}] {site.domain}: CHANGED")
+        typer.echo("\n".join(f"  {line}" for line in diff_text.splitlines()))
+        if webhook:
+            _notify_webhook(webhook, {**summary, "diff": diff_text})
+    return any_changes
+
+
+def _notify_webhook(url: str, payload: dict) -> None:
+    try:
+        response = httpx.post(
+            url, json=payload, headers={"User-Agent": USER_AGENT}, timeout=15.0
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as error:
+        typer.echo(f"  webhook notification failed: {error}", err=True)
 
 
 @generate_app.command("llms-txt")

@@ -19,7 +19,7 @@
 ![category](https://img.shields.io/badge/category-Agents%20%2F%20Discovery-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Medium-yellow)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-43%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-52%20passing-brightgreen)
 
 ```
 ┌─[ TARGET ]──────────────────────────────────────────────────┐
@@ -80,7 +80,10 @@ uv run beacon audit shop.example --json             # machine report
 uv run beacon audit shop.example --html report.html # shareable HTML report
 uv run beacon audit shop.example --min-score 70     # CI gate: exit 1 below threshold
 uv run beacon audit --file domains.txt              # batch audit → ranking table
+uv run beacon audit --file rivals.txt --html bench.html  # competitor benchmark report
 uv run beacon diff shop.example                     # what changed since the last audit
+uv run beacon watch shop.example -i 6h              # scheduled re-audits, diff on change
+uv run beacon watch --file rivals.txt --once        # one cycle (cron-friendly): exit 3 on change
 ```
 
 ```
@@ -104,6 +107,27 @@ uv run beacon generate llms-txt shop.example -o llms.txt   # sitemap-driven draf
 uv run beacon generate mcp openapi.json                    # runnable MCP server scaffold
 ```
 
+The MCP scaffold is auth-aware: the spec's `securitySchemes` (apiKey in
+header/query/cookie, HTTP bearer/basic, OAuth2 access tokens) are wired into
+the generated server as environment variables, each documented in the
+scaffold's README. No schemes in the spec → a clearly-labeled generic bearer
+stub.
+
+## [ Overwatch ] — watch mode
+
+`beacon watch` re-audits on a schedule and prints a diff only when something
+actually changed — new failures, fixed checks, score moves. `--webhook URL`
+POSTs the change summary as JSON (Slack-webhook-shaped enough to pipe
+anywhere); `--once` runs a single cycle for cron/CI and exits 3 when changes
+were detected.
+
+## [ Wargames ] — competitor benchmarking
+
+`beacon audit --file rivals.txt --html bench.html` turns a batch audit into a
+sales-ready single-file HTML benchmark: ranked score table with per-layer
+breakdown, plus a check-by-check PASS/WARN/FAIL matrix across every domain —
+"you fail where your competitor passes" at a glance.
+
 ## [ Oracle ] — simulate an agent
 
 The audit checks signals; the oracle checks reality. `beacon simulate` fetches
@@ -123,7 +147,7 @@ uv run beacon simulate shop.example
 
 ```
 src/beacon/
-├── cli.py              audit · generate llms-txt · generate mcp
+├── cli.py              audit · watch · diff · simulate · generate
 ├── fetch.py            polite client: honest UA, deduped, bounded concurrency
 ├── discover.py         sitemap walking (incl. index children) · homepage links
 ├── platform.py         Shopify/Woo/Wix/... detection → platform-aware fixes
@@ -163,6 +187,6 @@ src/beacon/
 - [x] YAML OpenAPI specs; HTTP/2 + tighter timeouts
 - [x] Agentic-discovery sitemap check (Shopify ships sitemap_agentic_discovery.xml)
 - [x] Simulated agent task-completion (`beacon simulate`, Claude-powered)
-- [ ] Auth-aware MCP scaffolds (OpenAPI securitySchemes → real auth wiring)
-- [ ] Watch mode: scheduled re-audits + notify on score changes
-- [ ] Competitor benchmarking report (batch + HTML, ranked side-by-side)
+- [x] Auth-aware MCP scaffolds (OpenAPI securitySchemes → real auth wiring)
+- [x] Watch mode: scheduled re-audits + diff/webhook notifications (`beacon watch`)
+- [x] Competitor benchmarking report (batch + `--html`, ranked side-by-side)
