@@ -54,7 +54,7 @@ refactor. No payments are built here — readiness and discovery only.
 ## [ Recon ] — the four layers
 
 ```
-crawl_policy   robots.txt AI-crawler rules (fetchers vs training bots) · sitemap
+crawl_policy   robots.txt AI-crawler rules (fetchers vs training bots) · sitemap · freshness
 content        JS-free text extraction · schema.org JSON-LD · metadata · landmarks · form operability
                product-page deep audit: Product/Offer JSON-LD, price · currency · availability
 api_mcp        llms.txt · OpenAPI discovery · MCP endpoint probes · platform detection   [future tier]
@@ -193,3 +193,4 @@ src/beacon/
 - [x] Watch mode: scheduled re-audits + diff/webhook notifications (`beacon watch`)
 - [x] Competitor benchmarking report (batch + `--html`, ranked side-by-side)
 - [x] Beacon obeys robots.txt for its own crawling (RFC 9309 path matching)
+- [x] Sitemap freshness check (newest lastmod age)

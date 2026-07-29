@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from beacon.checks.base import Finding, Layer, Status, Tier
+from beacon.discover import sitemap_lastmods
 from beacon.fetch import Site
 from beacon.robots import parse_robots
+
+MAX_SITEMAP_AGE_DAYS = 90
 
 # Bots that fetch pages live on behalf of a user or agent session. Blocking
 # these makes the site invisible to agents at the moment of use.
@@ -54,6 +59,7 @@ class CrawlPolicyCheck:
                 )
             )
             findings.append(await self._sitemap_finding(site, declared=[]))
+            findings.extend(await self._freshness_findings(site))
             return findings
 
         robots = parse_robots(robots_text)
@@ -109,7 +115,56 @@ class CrawlPolicyCheck:
             )
 
         findings.append(await self._sitemap_finding(site, declared=robots.sitemaps))
+        findings.extend(await self._freshness_findings(site))
         return findings
+
+    async def _freshness_findings(self, site: Site) -> list[Finding]:
+        stamps = await sitemap_lastmods(site)
+        if stamps is None:
+            return []
+        dates = []
+        for stamp in stamps:
+            try:
+                parsed = datetime.fromisoformat(stamp.strip())
+            except ValueError:
+                continue
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            dates.append(parsed)
+        if not dates:
+            return [
+                Finding(
+                    id="sitemap-freshness",
+                    layer=self.layer,
+                    tier=Tier.TODAY,
+                    status=Status.INFO,
+                    weight=0,
+                    summary="Sitemap has no lastmod dates — agents can't tell how fresh the catalog is",
+                )
+            ]
+        age_days = (datetime.now(timezone.utc) - max(dates)).days
+        if age_days <= MAX_SITEMAP_AGE_DAYS:
+            return [
+                Finding(
+                    id="sitemap-freshness",
+                    layer=self.layer,
+                    tier=Tier.TODAY,
+                    status=Status.PASS,
+                    weight=1,
+                    summary=f"Sitemap is fresh — newest lastmod is {max(age_days, 0)} day(s) old",
+                )
+            ]
+        return [
+            Finding(
+                id="sitemap-freshness",
+                layer=self.layer,
+                tier=Tier.TODAY,
+                status=Status.WARN,
+                weight=1,
+                summary=f"Newest sitemap lastmod is {age_days} days old — the catalog looks unmaintained to agents",
+                fix="Regenerate the sitemap on publish so lastmod reflects reality (most platforms do this automatically)",
+            )
+        ]
 
     async def _sitemap_finding(self, site: Site, declared: list[str]) -> Finding:
         if declared:

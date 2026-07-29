@@ -81,6 +81,7 @@ async def test_training_block_is_info_not_fail():
             "Sitemap: https://shop.example/sitemap.xml\n"
         ),
     )
+    respx.get(f"{BASE}/sitemap.xml").respond(404)
     site = make_site()
     findings = await CrawlPolicyCheck().run(site)
     await site.aclose()
@@ -88,3 +89,54 @@ async def test_training_block_is_info_not_fail():
     assert by_id(findings, "training-crawlers-blocked").status is Status.INFO
     assert by_id(findings, "sitemap-available").status is Status.PASS
     assert all(f.tier is Tier.TODAY for f in findings)
+
+
+def sitemap_with_lastmod(lastmod: str | None) -> str:
+    stamp = f"<lastmod>{lastmod}</lastmod>" if lastmod else ""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"<url><loc>{BASE}/page</loc>{stamp}</url></urlset>"
+    )
+
+
+async def freshness_finding(lastmod: str | None):
+    respx.get(f"{BASE}/robots.txt").respond(200, text=f"Sitemap: {BASE}/sitemap.xml\n")
+    respx.get(f"{BASE}/sitemap.xml").respond(200, text=sitemap_with_lastmod(lastmod))
+    site = make_site()
+    findings = await CrawlPolicyCheck().run(site)
+    await site.aclose()
+    return by_id(findings, "sitemap-freshness")
+
+
+@respx.mock
+async def test_fresh_sitemap_passes():
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    finding = await freshness_finding(today)
+    assert finding.status is Status.PASS
+
+
+@respx.mock
+async def test_stale_sitemap_warns():
+    finding = await freshness_finding("2020-01-01T00:00:00+00:00")
+    assert finding.status is Status.WARN
+    assert "unmaintained" in finding.summary
+
+
+@respx.mock
+async def test_sitemap_without_lastmod_is_info():
+    finding = await freshness_finding(None)
+    assert finding.status is Status.INFO
+    assert finding.weight == 0
+
+
+@respx.mock
+async def test_no_sitemap_means_no_freshness_finding():
+    respx.get(f"{BASE}/robots.txt").respond(404)
+    respx.get(f"{BASE}/sitemap.xml").respond(404)
+    site = make_site()
+    findings = await CrawlPolicyCheck().run(site)
+    await site.aclose()
+    assert not any(f.id == "sitemap-freshness" for f in findings)

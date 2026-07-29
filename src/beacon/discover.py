@@ -52,6 +52,28 @@ async def sitemap_urls(site: Site) -> list[str]:
     return []
 
 
+async def sitemap_lastmods(site: Site) -> list[str] | None:
+    """lastmod stamps from the site's sitemap, or None when no sitemap exists.
+    For a sitemap index without its own stamps, the first few children are read."""
+    async for root in _sitemap_roots(site):
+        if root.tag.endswith("sitemapindex"):
+            stamps = _locs(root, "sm:sitemap/sm:lastmod")
+            if stamps:
+                return stamps
+            nested = _locs(root, "sm:sitemap/sm:loc")
+            children = await asyncio.gather(
+                *(_fetch_xml(site, child_url) for child_url in nested[:MAX_INDEX_CHILDREN])
+            )
+            return [
+                stamp
+                for child in children
+                if child is not None
+                for stamp in _locs(child, "sm:url/sm:lastmod")
+            ]
+        return _locs(root, "sm:url/sm:lastmod")
+    return None
+
+
 async def sitemap_index_children(site: Site) -> list[str]:
     """Child sitemap URLs when the site's sitemap is an index, else []."""
     async for root in _sitemap_roots(site):
