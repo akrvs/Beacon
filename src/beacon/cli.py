@@ -323,11 +323,11 @@ def mcp(
 
     files = scaffold_mcp_server(spec_data, server_name=name)
     output.mkdir(parents=True, exist_ok=True)
+    existing = [str(output / filename) for filename in files if (output / filename).exists()]
+    if existing:
+        raise typer.BadParameter(f"{', '.join(existing)} already exist(s) — refusing to overwrite")
     for filename, content in files.items():
-        target = output / filename
-        if target.exists():
-            raise typer.BadParameter(f"{target} already exists — refusing to overwrite")
-        target.write_text(content, encoding="utf-8")
+        (output / filename).write_text(content, encoding="utf-8")
     typer.echo(f"Scaffolded MCP server in {output}/ — review server.py before deploying")
 
 
