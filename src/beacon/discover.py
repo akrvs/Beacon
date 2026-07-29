@@ -22,29 +22,20 @@ async def sitemap_urls(site: Site) -> list[str]:
     fallback). For a sitemap index, the first few children are fetched in
     parallel and concatenated, so e.g. Shopify's separate products/pages/
     collections child sitemaps all contribute."""
-    robots_text = await site.robots_txt()
-    candidates = parse_robots(robots_text).sitemaps if robots_text else []
-    candidates.append(site.fetcher.url_for("/sitemap.xml"))
-    for sitemap_url in candidates:
-        root = await _fetch_xml(site, sitemap_url)
-        if root is None:
-            continue
+    async for root in _sitemap_roots(site):
         if root.tag.endswith("sitemapindex"):
-            nested = [node.text for node in root.findall("sm:sitemap/sm:loc", _SITEMAP_NS) if node.text]
+            nested = _locs(root, "sm:sitemap/sm:loc")
             children = await asyncio.gather(
                 *(_fetch_xml(site, child_url) for child_url in nested[:MAX_INDEX_CHILDREN])
             )
             urls = [
-                node.text
+                loc
                 for child in children
                 if child is not None
-                for node in child.findall("sm:url/sm:loc", _SITEMAP_NS)
-                if node.text
+                for loc in _locs(child, "sm:url/sm:loc")
             ]
-            if urls:
-                return urls
-            continue
-        urls = [node.text for node in root.findall("sm:url/sm:loc", _SITEMAP_NS) if node.text]
+        else:
+            urls = _locs(root, "sm:url/sm:loc")
         if urls:
             return urls
     return []
@@ -52,17 +43,26 @@ async def sitemap_urls(site: Site) -> list[str]:
 
 async def sitemap_index_children(site: Site) -> list[str]:
     """Child sitemap URLs when the site's sitemap is an index, else []."""
+    async for root in _sitemap_roots(site):
+        if root.tag.endswith("sitemapindex"):
+            return _locs(root, "sm:sitemap/sm:loc")
+        return []
+    return []
+
+
+async def _sitemap_roots(site: Site):
+    """Parsed roots of the site's sitemap candidates, best candidate first."""
     robots_text = await site.robots_txt()
     candidates = parse_robots(robots_text).sitemaps if robots_text else []
     candidates.append(site.fetcher.url_for("/sitemap.xml"))
     for sitemap_url in candidates:
         root = await _fetch_xml(site, sitemap_url)
-        if root is None:
-            continue
-        if root.tag.endswith("sitemapindex"):
-            return [node.text for node in root.findall("sm:sitemap/sm:loc", _SITEMAP_NS) if node.text]
-        return []
-    return []
+        if root is not None:
+            yield root
+
+
+def _locs(root: ET.Element, path: str) -> list[str]:
+    return [node.text for node in root.findall(path, _SITEMAP_NS) if node.text]
 
 
 async def _fetch_xml(site: Site, url: str) -> ET.Element | None:
