@@ -134,6 +134,52 @@ def test_unknown_scheme_type_becomes_todo():
     assert "not auto-wired" in files["README.md"]
 
 
+def test_hostile_spec_values_cannot_inject_code():
+    spec = {
+        "info": {"title": "t"},
+        "servers": [{"url": 'https://x.example"); evil()  # '}],
+        "security": [{"Key": []}, {"Bearer": []}, {"Cookie": []}],
+        "components": {
+            "securitySchemes": {
+                "Key": {"type": "apiKey", "in": "header", "name": 'X"] = evil()  # '},
+                "Bearer": {"type": "http", "scheme": 'b" + evil()  # '},
+                "Cookie": {"type": "apiKey", "in": "cookie", "name": 'c"=evil()  # \n'},
+            }
+        },
+        "paths": {
+            '/a"{b}': {
+                "get": {
+                    "operationId": "from",
+                    "summary": 'end """\nevil()\nx = """',
+                    "description": 'back\\slash and """ breakout',
+                    "parameters": [
+                        {
+                            "name": 'q"key',
+                            "in": "query",
+                            "schema": {"type": "string"},
+                            "description": 'desc """ breakout',
+                        },
+                        {"name": "import", "in": "query", "schema": {"type": "string"}},
+                    ],
+                }
+            },
+            "/b/{id}/c{stray}": {
+                "parameters": [
+                    {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "get": {"operationId": "getB"},
+            },
+        },
+    }
+    server = scaffold_mcp_server(spec)["server.py"]
+    tree = ast.parse(server)
+    for node in ast.walk(tree):
+        assert not (isinstance(node, ast.Name) and node.id == "evil")
+    assert "async def from_(" in server
+    assert "import_: str | None = None" in server
+    assert 'f"/b/{id}/c{{stray}}"' in server
+
+
 def test_duplicate_operation_ids_are_deduped():
     spec = {
         "info": {"title": "t"},

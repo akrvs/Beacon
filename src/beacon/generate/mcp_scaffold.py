@@ -9,6 +9,8 @@ operations to expose are decisions the owner must make.
 
 from __future__ import annotations
 
+import json
+import keyword
 import re
 from dataclasses import dataclass
 
@@ -51,7 +53,7 @@ def scaffold_mcp_server(spec: dict, server_name: str | None = None) -> dict[str,
     auth = _build_auth(spec)
     server_py = _SERVER_TEMPLATE.format(
         name=name,
-        base_url=base_url,
+        base_url=_lit(base_url),
         tool_count=len(tools),
         tools="\n\n".join(tools),
         extra_imports=auth.imports,
@@ -135,7 +137,7 @@ def _build_auth(spec: dict) -> _Auth:
 
     def declare(var: str, comment: str) -> str:
         var = _unique(var, used_env)
-        env_lines.append(f'{var} = os.environ.get("{var}", "")  # {comment}')
+        env_lines.append(f'{var} = os.environ.get("{var}", "")  # {_comment(comment)}')
         env_vars.append(var)
         return var
 
@@ -148,11 +150,11 @@ def _build_auth(spec: dict) -> _Auth:
             var = declare(base, f"{scheme_name}: apiKey in {location} '{param}'")
             body.append(f"    if {var}:")
             if location == "query":
-                body.append(f'        params["{param}"] = {var}')
+                body.append(f"        params[{_lit(param)}] = {var}")
             elif location == "cookie":
-                body.append(f'        headers["Cookie"] = f"{param}={{{var}}}"')
+                body.append(f'        headers["Cookie"] = {_lit(param + "=")} + {var}')
             else:
-                body.append(f'        headers["{param}"] = {var}')
+                body.append(f"        headers[{_lit(param)}] = {var}")
             readme_rows.append(f"- `{var}` — API key sent as {location} `{param}` ({scheme_name}).")
         elif scheme_type == "http" and (scheme.get("scheme") or "").lower() == "basic":
             user_var = declare(f"{base}_USERNAME", f"{scheme_name}: HTTP basic")
@@ -172,7 +174,7 @@ def _build_auth(spec: dict) -> _Auth:
             var = declare(f"{base}_TOKEN", f"{scheme_name}: HTTP {http_scheme}")
             body += [
                 f"    if {var}:",
-                f'        headers["Authorization"] = f"{prefix} {{{var}}}"',
+                f'        headers["Authorization"] = f"{_fstr(prefix)} {{{var}}}"',
             ]
             readme_rows.append(f"- `{var}` — HTTP {http_scheme} token ({scheme_name}).")
         elif scheme_type in ("oauth2", "openidconnect"):
@@ -187,8 +189,8 @@ def _build_auth(spec: dict) -> _Auth:
             )
         else:
             body.append(
-                f"    # TODO: security scheme '{scheme_name}' "
-                f"(type {scheme_type or 'unknown'}) needs manual wiring"
+                f"    # TODO: security scheme '{_comment(scheme_name)}' "
+                f"(type {_comment(scheme_type) or 'unknown'}) needs manual wiring"
             )
             readme_rows.append(
                 f"- `{scheme_name}` (type `{scheme_type or 'unknown'}`) is not auto-wired — "
@@ -223,6 +225,7 @@ def _render_tool(
 
     params = []
     seen = set()
+    used_args = {"body"}
     for param in list(shared_params) + list(operation.get("parameters", [])):
         if not isinstance(param, dict):
             continue
@@ -233,7 +236,7 @@ def _render_tool(
         seen.add(raw_name)
         params.append(
             {
-                "arg": _slug(raw_name) or "arg",
+                "arg": _unique(_slug(raw_name) or "arg", used_args),
                 "name": raw_name,
                 "in": location,
                 "required": location == "path" or bool(param.get("required")),
@@ -263,16 +266,27 @@ def _render_tool(
     param_docs = [f"    {p['arg']}: {p['description']}" for p in params if p["description"]]
     if param_docs:
         doc_lines += ["", "Args:"] + param_docs
-    docstring = "\n    ".join("\n".join(doc_lines).splitlines())
+    docstring = "\n    ".join(_doc("\n".join(doc_lines)).splitlines())
 
-    fstring_path = path
-    for p in params:
-        if p["in"] == "path":
-            fstring_path = fstring_path.replace("{" + p["name"] + "}", "{" + p["arg"] + "}")
-    path_expr = f'f"{fstring_path}"' if "{" in fstring_path else f'"{fstring_path}"'
+    path_args = {p["name"]: p["arg"] for p in params if p["in"] == "path"}
+    pieces: list[str] = []
+    interpolated = False
+    for index, segment in enumerate(re.split(r"\{([^{}]*)\}", path)):
+        if index % 2 and segment in path_args:
+            pieces.append("{" + path_args[segment] + "}")
+            interpolated = True
+        elif index % 2:
+            pieces.append("{{" + _fstr(segment) + "}}")
+        else:
+            pieces.append(_fstr(segment))
+    literal = "".join(pieces)
+    if interpolated:
+        path_expr = f'f"{literal}"'
+    else:
+        path_expr = f'"{literal.replace("{{", "{").replace("}}", "}")}"'
 
     query_items = ", ".join(
-        f'"{p["name"]}": {p["arg"]}' for p in params if p["in"] == "query"
+        f'{_lit(p["name"])}: {p["arg"]}' for p in params if p["in"] == "query"
     )
     call_args = [f"path={path_expr}"]
     if query_items:
@@ -295,7 +309,27 @@ def _slug(text: str) -> str:
     text = re.sub(r"[^0-9a-zA-Z]+", "_", text).strip("_").lower()
     if text and text[0].isdigit():
         text = f"op_{text}"
+    if keyword.iskeyword(text):
+        text = f"{text}_"
     return text
+
+
+def _lit(text: str) -> str:
+    """A safe double-quoted Python string literal for spec-derived text."""
+    return json.dumps(text)
+
+
+def _fstr(text: str) -> str:
+    """Spec-derived text escaped for embedding inside a generated f-string."""
+    return _lit(text)[1:-1].replace("{", "{{").replace("}", "}}")
+
+
+def _comment(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _doc(text: str) -> str:
+    return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _unique(name: str, used: set[str]) -> str:
@@ -322,7 +356,7 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("{name}")
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "{base_url}")
+API_BASE_URL = os.environ.get("API_BASE_URL", {base_url})
 {env_block}
 
 
