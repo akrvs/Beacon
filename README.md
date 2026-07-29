@@ -19,7 +19,7 @@
 ![category](https://img.shields.io/badge/category-Agents%20%2F%20Discovery-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Medium-yellow)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-52%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-53%20passing-brightgreen)
 
 ```
 ┌─[ TARGET ]──────────────────────────────────────────────────┐
