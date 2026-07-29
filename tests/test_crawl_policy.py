@@ -1,5 +1,4 @@
 import httpx
-import pytest
 import respx
 
 from beacon.checks.base import Status, Tier
