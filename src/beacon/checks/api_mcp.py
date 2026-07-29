@@ -13,20 +13,11 @@ import httpx
 
 from beacon.checks.base import Finding, Layer, Status, Tier
 from beacon.discover import sitemap_index_children
-from beacon.fetch import Site
+from beacon.fetch import Site, is_real_text
 from beacon.platform import HOSTED_PLATFORMS, detect_platform
 
 OPENAPI_PROBES = ["/openapi.json", "/swagger.json", "/api/openapi.json", "/.well-known/openapi.json"]
 MCP_PROBES = ["/.well-known/mcp.json", "/mcp"]
-
-
-def _is_real_text(response: httpx.Response | None) -> bool:
-    """A 200 that is actually plain text, not an SPA catch-all serving HTML."""
-    if response is None or response.status_code != 200:
-        return False
-    content_type = response.headers.get("content-type", "")
-    body = response.text.lstrip()[:100].lower()
-    return "html" not in content_type and not body.startswith(("<!doctype", "<html"))
 
 
 def _openapi_spec(response: httpx.Response | None) -> dict | None:
@@ -71,7 +62,7 @@ class ApiMcpCheck:
 
     async def _llms_txt(self, site: Site) -> Finding:
         response = await site.get("/llms.txt")
-        if _is_real_text(response):
+        if is_real_text(response):
             return Finding(
                 id="llms-txt",
                 layer=self.layer,
@@ -119,7 +110,7 @@ class ApiMcpCheck:
     async def _mcp(self, site: Site, platform: str | None = None) -> Finding:
         responses = await asyncio.gather(*(site.get(path) for path in MCP_PROBES))
         for path, response in zip(MCP_PROBES, responses):
-            if _is_real_text(response):
+            if is_real_text(response):
                 return Finding(
                     id="mcp-endpoint",
                     layer=self.layer,

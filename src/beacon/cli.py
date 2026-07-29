@@ -70,15 +70,16 @@ def audit(
 
     site, findings = asyncio.run(run_audit(domain))
     card = score(findings)
+    data = report.payload(site.domain, findings, card)
     if json_out:
-        typer.echo(report.to_json(site.domain, findings, card))
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
     else:
         typer.echo(report.render_text(site.domain, findings, card))
     if html is not None:
         html.write_text(report.render_html(site.domain, findings, card), encoding="utf-8")
         typer.echo(f"\nHTML report written to {html}")
     if save:
-        history.save_run(site.domain, report.payload(site.domain, findings, card))
+        history.save_run(site.domain, data)
     if min_score is not None and (card.today.percent or 0) < min_score:
         typer.echo(f"Score {card.today.percent or 0} is below --min-score {min_score}", err=True)
         raise typer.Exit(1)
@@ -116,11 +117,13 @@ def _audit_batch(
 ) -> None:
     domains = _read_domains(domains_file)
     results = []
+    payloads: dict[str, dict] = {}
     for site, findings in _run_audits(domains):
         card = score(findings)
         results.append((site.domain, findings, card))
+        payloads[site.domain] = report.payload(site.domain, findings, card)
         if save:
-            history.save_run(site.domain, report.payload(site.domain, findings, card))
+            history.save_run(site.domain, payloads[site.domain])
     results.sort(key=lambda item: item[2].today.percent or 0, reverse=True)
 
     if html is not None:
@@ -128,7 +131,7 @@ def _audit_batch(
         typer.echo(f"Benchmark HTML written to {html}", err=json_out)
 
     if json_out:
-        batch = [report.payload(domain, findings, card) for domain, findings, card in results]
+        batch = [payloads[domain] for domain, _, _ in results]
         typer.echo(json.dumps(batch, indent=2, ensure_ascii=False))
     else:
         width = max(len(domain) for domain, _, _ in results)

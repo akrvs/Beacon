@@ -12,6 +12,15 @@ MAX_CONCURRENCY = 4
 REQUEST_DELAY = 0.15
 
 
+def is_real_text(response: httpx.Response | None) -> bool:
+    """A 200 that is actually plain text, not an SPA catch-all serving HTML."""
+    if response is None or response.status_code != 200:
+        return False
+    content_type = response.headers.get("content-type", "")
+    body = response.text.lstrip()[:100].lower()
+    return "html" not in content_type and not body.startswith(("<!doctype", "<html"))
+
+
 def normalize_base_url(domain: str) -> str:
     domain = domain.strip().rstrip("/")
     if not domain.startswith(("http://", "https://")):

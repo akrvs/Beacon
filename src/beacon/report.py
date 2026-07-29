@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import html
 from datetime import datetime, timezone
 
 from beacon.checks.base import Finding, Layer, Status, Tier
@@ -30,10 +30,6 @@ def payload(domain: str, findings: list[Finding], card: ScoreCard) -> dict:
         **card.to_dict(),
         "findings": [f.to_dict() for f in findings],
     }
-
-
-def to_json(domain: str, findings: list[Finding], card: ScoreCard) -> str:
-    return json.dumps(payload(domain, findings, card), indent=2, ensure_ascii=False)
 
 
 def render_text(domain: str, findings: list[Finding], card: ScoreCard) -> str:
@@ -184,8 +180,7 @@ def _pct(tier_score) -> str:
     return _num(percent)
 
 
-def _esc(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+_esc = html.escape
 
 
 _HTML_TEMPLATE = """<!doctype html>

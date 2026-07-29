@@ -33,15 +33,15 @@ class ContentCheck:
 
         tree = HTMLParser(response.text)
         return [
-            self._extractability(tree),
+            self._extractability(response.text),
             self._structured_data(tree),
             self._metadata(tree),
             self._landmarks(tree),
             self._forms(tree),
         ]
 
-    def _extractability(self, tree: HTMLParser) -> Finding:
-        stripped = HTMLParser(tree.html or "")
+    def _extractability(self, html: str) -> Finding:
+        stripped = HTMLParser(html)
         for node in stripped.css("script, style, noscript, template"):
             node.decompose()
         text = (stripped.body.text(separator=" ") if stripped.body else "").split()

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 
 from beacon.checks.base import Finding, Layer, Status, Tier
-from beacon.fetch import Site
+from beacon.fetch import Site, is_real_text
 
 PROTOCOL_PROBES = {
     "UCP": "/.well-known/ucp.json",
@@ -27,12 +27,9 @@ class CheckoutCheck:
         responses = await asyncio.gather(
             *(site.get(path) for path in PROTOCOL_PROBES.values())
         )
-        supported: list[str] = []
-        for name, response in zip(PROTOCOL_PROBES, responses):
-            if response is not None and response.status_code == 200:
-                body = response.text.lstrip()[:100].lower()
-                if not body.startswith(("<!doctype", "<html")):
-                    supported.append(name)
+        supported = [
+            name for name, response in zip(PROTOCOL_PROBES, responses) if is_real_text(response)
+        ]
         if supported:
             return [
                 Finding(

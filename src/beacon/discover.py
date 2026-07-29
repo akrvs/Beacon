@@ -80,12 +80,13 @@ def homepage_links(site: Site, homepage: httpx.Response | None) -> list[str]:
     if homepage is None or homepage.status_code >= 400:
         return []
     tree = HTMLParser(homepage.text)
+    base = httpx.URL(site.base_url)
     seen: dict[str, None] = {}
     for anchor in tree.css("a[href]"):
         href = (anchor.attributes.get("href") or "").split("#")[0]
         if not href or href.startswith(("mailto:", "tel:", "javascript:")):
             continue
-        url = str(httpx.URL(site.base_url).join(href))
-        if httpx.URL(url).host == site.domain:
-            seen[url] = None
+        url = base.join(href)
+        if url.host == site.domain:
+            seen[str(url)] = None
     return list(seen)
