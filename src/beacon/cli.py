@@ -199,6 +199,36 @@ def diff(
     typer.echo(history.diff_runs(runs[0], runs[1]))
 
 
+_BADGE_COLORS = [(80, "brightgreen"), (60, "green"), (40, "yellow"), (20, "orange"), (0, "red")]
+
+
+@app.command()
+def badge(
+    domain: str = typer.Argument(..., help="Domain with at least one recorded audit"),
+    output: Path = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout"),
+) -> None:
+    """Emit shields.io endpoint JSON for the domain's latest recorded visibility score."""
+    key = httpx.URL(normalize_base_url(domain)).host
+    runs = history.load_runs(key, limit=1)
+    if not runs:
+        typer.echo(f"No recorded audits for {key} — run `beacon audit {key}` first", err=True)
+        raise typer.Exit(2)
+    score_today = runs[-1].get("score_today")
+    if score_today is None:
+        message, color = "n/a", "lightgrey"
+    else:
+        message = f"{score_today}/100"
+        color = next(c for threshold, c in _BADGE_COLORS if score_today >= threshold)
+    payload = json.dumps(
+        {"schemaVersion": 1, "label": "agent visibility", "message": message, "color": color}
+    )
+    if output is not None:
+        output.write_text(payload, encoding="utf-8")
+        typer.echo(f"Badge JSON written to {output} — point a shields.io endpoint badge at it")
+    else:
+        typer.echo(payload)
+
+
 _INTERVAL_UNITS = {"": 60, "s": 1, "m": 60, "h": 3600, "d": 86400}
 
 

@@ -84,6 +84,7 @@ uv run beacon audit --file rivals.txt --html bench.html  # competitor benchmark 
 uv run beacon diff shop.example                     # what changed since the last audit
 uv run beacon watch shop.example -i 6h              # scheduled re-audits, diff on change
 uv run beacon watch --file rivals.txt --once        # one cycle (cron-friendly): exit 3 on change
+uv run beacon badge shop.example -o badge.json      # shields.io endpoint JSON from the last audit
 ```
 
 ```
@@ -196,3 +197,4 @@ src/beacon/
 - [x] Beacon obeys robots.txt for its own crawling (RFC 9309 path matching)
 - [x] Sitemap freshness check (newest lastmod age)
 - [x] `beacon simulate --json` for CI and dashboards
+- [x] `beacon badge`: shields.io endpoint JSON from the latest recorded score

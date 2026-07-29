@@ -106,6 +106,23 @@ def test_watch_rejects_bad_interval():
     assert result.exit_code != 0
 
 
+@respx.mock
+def test_badge_from_recorded_history(two_domains):
+    runner.invoke(app, ["audit", "--file", str(two_domains)])
+    result = runner.invoke(app, ["badge", "good.example"])
+    assert result.exit_code == 0
+    badge = json.loads(result.output)
+    assert badge["schemaVersion"] == 1
+    assert badge["label"] == "agent visibility"
+    assert badge["message"].endswith("/100")
+    assert badge["color"]
+
+
+def test_badge_needs_history(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    assert runner.invoke(app, ["badge", "never.example"]).exit_code == 2
+
+
 def test_diff_needs_two_runs(tmp_path, monkeypatch):
     monkeypatch.setenv("BEACON_HOME", str(tmp_path))
     result = runner.invoke(app, ["diff", "never-audited.example"])
