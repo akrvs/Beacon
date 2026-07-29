@@ -141,6 +141,7 @@ the site fails to expose. Evidence a merchant can't argue with.
 uv sync --extra ai                        # optional AI layer (anthropic SDK)
 export ANTHROPIC_API_KEY=sk-ant-...
 uv run beacon simulate shop.example
+uv run beacon simulate shop.example --json   # machine-readable verdicts
 ```
 
 ## [ Loadout ] — architecture
@@ -194,3 +195,4 @@ src/beacon/
 - [x] Competitor benchmarking report (batch + `--html`, ranked side-by-side)
 - [x] Beacon obeys robots.txt for its own crawling (RFC 9309 path matching)
 - [x] Sitemap freshness check (newest lastmod age)
+- [x] `beacon simulate --json` for CI and dashboards

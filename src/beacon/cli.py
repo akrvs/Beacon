@@ -159,6 +159,7 @@ def _audit_batch(
 def simulate(
     domain: str = typer.Argument(..., help="Domain to test with a simulated agent"),
     model: str = typer.Option("claude-opus-4-8", "--model", help="Claude model to simulate with"),
+    json_out: bool = typer.Option(False, "--json", help="Emit the simulation report as JSON"),
 ) -> None:
     """Have Claude attempt real customer tasks using only what an agent can extract from the site."""
     try:
@@ -176,7 +177,7 @@ def simulate(
     )
     client = anthropic.Anthropic()
     try:
-        typer.echo(simulate_domain(domain, client, model))
+        typer.echo(simulate_domain(domain, client, model, json_out=json_out))
     except (TypeError, anthropic.AuthenticationError):
         typer.echo(no_credentials, err=True)
         raise typer.Exit(2)

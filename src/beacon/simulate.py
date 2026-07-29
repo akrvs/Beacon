@@ -12,6 +12,7 @@ Requires the `ai` extra (`uv sync --extra ai`) and Anthropic API credentials.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Literal
 
 import httpx
@@ -100,6 +101,10 @@ def run_simulation(domain: str, pages: dict[str, str], client, model: str) -> Si
     return response.parsed_output
 
 
+def simulation_payload(domain: str, pages: dict[str, str], report: SimulationReport) -> dict:
+    return {"domain": domain, "pages_read": list(pages), **report.model_dump()}
+
+
 def render_simulation(domain: str, pages: dict[str, str], report: SimulationReport) -> str:
     marks = {"answered": "✓", "partial": "!", "unanswerable": "✗"}
     lines = [
@@ -130,9 +135,14 @@ async def fetch_pages(domain: str) -> tuple[str, dict[str, str]]:
     return site.domain, pages
 
 
-def simulate_domain(domain: str, client, model: str) -> str:
+def simulate_domain(domain: str, client, model: str, json_out: bool = False) -> str:
     host, pages = asyncio.run(fetch_pages(domain))
     if not pages:
-        return f"Could not fetch any pages from {host} — nothing to simulate."
+        message = f"Could not fetch any pages from {host} — nothing to simulate."
+        if json_out:
+            return json.dumps({"domain": host, "pages_read": [], "error": message})
+        return message
     report = run_simulation(host, pages, client, model)
+    if json_out:
+        return json.dumps(simulation_payload(host, pages, report), indent=2, ensure_ascii=False)
     return render_simulation(host, pages, report)

@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import respx
 
@@ -9,6 +11,7 @@ from beacon.simulate import (
     gather_agent_view,
     render_simulation,
     run_simulation,
+    simulation_payload,
 )
 
 BASE = "https://shop.example"
@@ -95,6 +98,15 @@ def test_run_simulation_calls_claude_with_structured_output():
     assert call["model"] == "claude-opus-4-8"
     assert call["output_format"] is SimulationReport
     assert call["thinking"] == {"type": "adaptive"}
+
+
+def test_simulation_payload_is_json_serializable():
+    payload = simulation_payload("shop.example", {"https://shop.example": "t"}, make_report())
+    assert payload["domain"] == "shop.example"
+    assert payload["pages_read"] == ["https://shop.example"]
+    assert payload["extraction_score"] == 55
+    assert payload["tasks"][0]["status"] == "answered"
+    json.dumps(payload)
 
 
 def test_render_simulation_readable():
