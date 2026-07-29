@@ -101,6 +101,20 @@ def test_watch_once_detects_changes(tmp_path, monkeypatch):
     assert "diff" in notification
 
 
+@respx.mock
+def test_watch_once_writes_status_page(two_domains, tmp_path):
+    out = tmp_path / "status.html"
+    result = runner.invoke(app, ["watch", "--file", str(two_domains), "--once", "--html", str(out)])
+    assert result.exit_code == 0
+    html = out.read_text(encoding="utf-8")
+    assert "Beacon benchmark" in html
+    assert "good.example" in html and "bad.example" in html
+
+    single = tmp_path / "single.html"
+    runner.invoke(app, ["watch", "good.example", "--once", "--html", str(single)])
+    assert "Beacon audit" in single.read_text(encoding="utf-8")
+
+
 def test_watch_rejects_bad_interval():
     result = runner.invoke(app, ["watch", "x.example", "--once", "--interval", "soon"])
     assert result.exit_code != 0

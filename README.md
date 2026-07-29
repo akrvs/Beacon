@@ -120,7 +120,8 @@ stub.
 actually changed — new failures, fixed checks, score moves. `--webhook URL`
 POSTs the change summary as JSON (Slack-webhook-shaped enough to pipe
 anywhere); `--once` runs a single cycle for cron/CI and exits 3 when changes
-were detected.
+were detected; `--html status.html` rewrites a self-updating status page
+(the benchmark layout when watching a file of domains) every cycle.
 
 ## [ Wargames ] — competitor benchmarking
 
@@ -198,3 +199,4 @@ src/beacon/
 - [x] Sitemap freshness check (newest lastmod age)
 - [x] `beacon simulate --json` for CI and dashboards
 - [x] `beacon badge`: shields.io endpoint JSON from the latest recorded score
+- [x] `beacon watch --html`: self-updating status page every cycle

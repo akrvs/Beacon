@@ -254,6 +254,9 @@ def watch(
     webhook: str = typer.Option(
         None, "--webhook", help="POST a JSON change notification to this URL when a domain changes"
     ),
+    html: Path = typer.Option(
+        None, "--html", help="Rewrite an HTML status page (benchmark for --file) after every cycle"
+    ),
 ) -> None:
     """Re-audit on a schedule and report what changed since the previous recorded run."""
     if (domain is None) == (domains_file is None):
@@ -262,7 +265,7 @@ def watch(
     seconds = _parse_interval(interval)
 
     while True:
-        any_changes = _watch_cycle(domains, webhook)
+        any_changes = _watch_cycle(domains, webhook, html)
         if once:
             raise typer.Exit(3 if any_changes else 0)
         typer.echo(f"Next audit in {interval} — Ctrl-C to stop.")
@@ -273,11 +276,13 @@ def watch(
             return
 
 
-def _watch_cycle(domains: list[str], webhook: str | None) -> bool:
+def _watch_cycle(domains: list[str], webhook: str | None, html: Path | None = None) -> bool:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     any_changes = False
+    results = []
     for site, findings in _run_audits(domains):
         card = score(findings)
+        results.append((site.domain, findings, card))
         previous = history.load_runs(site.domain, limit=1)
         current = report.payload(site.domain, findings, card)
         history.save_run(site.domain, current)
@@ -295,6 +300,14 @@ def _watch_cycle(domains: list[str], webhook: str | None) -> bool:
         typer.echo("\n".join(f"  {line}" for line in diff_text.splitlines()))
         if webhook:
             _notify_webhook(webhook, {**summary, "diff": diff_text})
+    if html is not None:
+        if len(results) == 1:
+            page = report.render_html(*results[0])
+        else:
+            results.sort(key=lambda item: item[2].today.percent or 0, reverse=True)
+            page = report.render_benchmark_html(results)
+        html.write_text(page, encoding="utf-8")
+        typer.echo(f"Status page written to {html}")
     return any_changes
 
 
