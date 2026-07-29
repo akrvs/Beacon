@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 from beacon.checks.base import Finding, Layer, Status, Tier
 from beacon.fetch import Site
+from beacon.robots import parse_robots
 
 # Bots that fetch pages live on behalf of a user or agent session. Blocking
 # these makes the site invisible to agents at the moment of use.
@@ -32,64 +31,6 @@ TRAINING_CRAWLERS = [
     "meta-externalagent",
     "Bytespider",
 ]
-
-
-@dataclass
-class RobotsGroup:
-    agents: list[str] = field(default_factory=list)
-    disallow: list[str] = field(default_factory=list)
-    allow: list[str] = field(default_factory=list)
-
-
-@dataclass
-class RobotsFile:
-    groups: list[RobotsGroup] = field(default_factory=list)
-    sitemaps: list[str] = field(default_factory=list)
-
-    def group_for(self, agent: str) -> RobotsGroup | None:
-        """Most specific applicable group per RFC 9309: exact token beats *."""
-        agent = agent.lower()
-        wildcard = None
-        for group in self.groups:
-            for token in group.agents:
-                if token == agent:
-                    return group
-                if token == "*" and wildcard is None:
-                    wildcard = group
-        return wildcard
-
-    def blocks_entirely(self, agent: str) -> bool:
-        group = self.group_for(agent)
-        if group is None:
-            return False
-        return "/" in group.disallow and "/" not in group.allow
-
-
-def parse_robots(text: str) -> RobotsFile:
-    robots = RobotsFile()
-    current: RobotsGroup | None = None
-    agents_open = False  # consecutive user-agent lines share one group
-    for raw_line in text.splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key = key.strip().lower()
-        value = value.strip()
-        if key == "sitemap":
-            robots.sitemaps.append(value)
-        elif key == "user-agent":
-            if not agents_open:
-                current = RobotsGroup()
-                robots.groups.append(current)
-                agents_open = True
-            current.agents.append(value.lower())
-        elif key in ("disallow", "allow") and current is not None:
-            agents_open = False
-            getattr(current, key).append(value)
-        else:
-            agents_open = False
-    return robots
 
 
 class CrawlPolicyCheck:

@@ -171,6 +171,8 @@ src/beacon/
 
 - Honest user agent (`BeaconBot/0.1`), no browser impersonation
 - Read-only GETs, response-cached, rate-limited — one polite pass per audit
+- Obeys the target's robots.txt for its own crawling: discovered pages the
+  site disallows for BeaconBot are never fetched
 - SPA catch-alls that answer 200-HTML to everything are detected, not counted
 - Builds readiness and discovery; never touches payments
 
@@ -190,3 +192,4 @@ src/beacon/
 - [x] Auth-aware MCP scaffolds (OpenAPI securitySchemes → real auth wiring)
 - [x] Watch mode: scheduled re-audits + diff/webhook notifications (`beacon watch`)
 - [x] Competitor benchmarking report (batch + `--html`, ranked side-by-side)
+- [x] Beacon obeys robots.txt for its own crawling (RFC 9309 path matching)

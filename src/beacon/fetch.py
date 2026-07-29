@@ -7,6 +7,7 @@ import asyncio
 import httpx
 
 USER_AGENT = "BeaconBot/0.1 (+https://github.com/akrvs/Beacon)"
+AGENT_TOKEN = "beaconbot"
 
 MAX_CONCURRENCY = 4
 REQUEST_DELAY = 0.15

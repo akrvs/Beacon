@@ -14,7 +14,7 @@ import httpx
 from selectolax.parser import HTMLParser
 
 from beacon.checks.base import Finding, Layer, Status, Tier
-from beacon.discover import homepage_links, sitemap_urls
+from beacon.discover import crawlable_urls
 from beacon.fetch import Site
 
 PRODUCT_PATH_HINTS = ("/product/", "/products/", "/item/", "/p/", "/shop/")
@@ -116,10 +116,7 @@ class ProductCheck:
         ]
 
     async def _find_product_page(self, site: Site) -> str | None:
-        urls = await sitemap_urls(site)
-        if not urls:
-            urls = homepage_links(site, await site.homepage())
-        for url in urls:
+        for url in await crawlable_urls(site):
             path = httpx.URL(url).path.lower()
             if any(hint in path for hint in PRODUCT_PATH_HINTS) and path.rstrip("/").count("/") >= 2:
                 return url

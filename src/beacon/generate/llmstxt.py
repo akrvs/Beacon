@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import httpx
 from selectolax.parser import HTMLParser
 
-from beacon.discover import homepage_links, sitemap_urls
+from beacon.discover import crawlable_urls
 from beacon.fetch import Site
 
 MAX_PAGES = 20
@@ -31,7 +31,7 @@ async def generate_llms_txt(site: Site) -> str:
     site_title, site_description = _title_and_description(homepage)
     site_title = site_title or site.domain
 
-    urls = await sitemap_urls(site) or homepage_links(site, homepage)
+    urls = await crawlable_urls(site)
     described = await asyncio.gather(*(_describe(site, url) for url in urls[:MAX_PAGES]))
     pages = [page for page in described if page is not None]
 

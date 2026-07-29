@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from selectolax.parser import HTMLParser
 
 from beacon.checks.product import PRODUCT_PATH_HINTS
-from beacon.discover import homepage_links, sitemap_urls
+from beacon.discover import crawlable_urls
 from beacon.fetch import Site
 
 MAX_CHARS_PER_PAGE = 8000
@@ -51,8 +51,7 @@ async def gather_agent_view(site: Site) -> dict[str, str]:
     if homepage is not None and homepage.status_code < 400:
         pages[site.base_url] = _extract_text(homepage.text)
 
-    urls = await sitemap_urls(site) or homepage_links(site, homepage)
-    for url in urls:
+    for url in await crawlable_urls(site):
         path = httpx.URL(url).path.lower()
         if any(hint in path for hint in PRODUCT_PATH_HINTS) and path.rstrip("/").count("/") >= 2:
             response = await site.get(url)

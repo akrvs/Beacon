@@ -8,13 +8,24 @@ import xml.etree.ElementTree as ET
 import httpx
 from selectolax.parser import HTMLParser
 
-from beacon.checks.crawl_policy import parse_robots
-from beacon.fetch import Site
+from beacon.fetch import AGENT_TOKEN, Site
+from beacon.robots import parse_robots
 
 _SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
 
 MAX_INDEX_CHILDREN = 4
+
+
+async def crawlable_urls(site: Site) -> list[str]:
+    """Discovered page URLs (sitemap first, homepage links fallback) minus
+    anything the site's robots.txt disallows for Beacon's own user agent."""
+    urls = await sitemap_urls(site) or homepage_links(site, await site.homepage())
+    robots_text = await site.robots_txt()
+    if not robots_text:
+        return urls
+    robots = parse_robots(robots_text)
+    return [url for url in urls if robots.allows(AGENT_TOKEN, httpx.URL(url).path)]
 
 
 async def sitemap_urls(site: Site) -> list[str]:
