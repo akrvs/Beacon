@@ -75,7 +75,7 @@ def audit(
     else:
         typer.echo(report.render_text(site.domain, findings, card))
     if html is not None:
-        html.write_text(report.render_html(site.domain, findings, card))
+        html.write_text(report.render_html(site.domain, findings, card), encoding="utf-8")
         typer.echo(f"\nHTML report written to {html}")
     if save:
         history.save_run(site.domain, report.payload(site.domain, findings, card))
@@ -90,7 +90,7 @@ MAX_PARALLEL_SITES = 4
 def _read_domains(domains_file: Path) -> list[str]:
     domains = [
         line.strip()
-        for line in domains_file.read_text().splitlines()
+        for line in domains_file.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
     if not domains:
@@ -124,7 +124,7 @@ def _audit_batch(
     results.sort(key=lambda item: item[2].today.percent or 0, reverse=True)
 
     if html is not None:
-        html.write_text(report.render_benchmark_html(results))
+        html.write_text(report.render_benchmark_html(results), encoding="utf-8")
         typer.echo(f"Benchmark HTML written to {html}", err=json_out)
 
     if json_out:
@@ -290,7 +290,7 @@ def llms_txt(
 
     text = asyncio.run(run())
     if output is not None:
-        output.write_text(text)
+        output.write_text(text, encoding="utf-8")
         typer.echo(f"Wrote {output} — review the draft before publishing it at /llms.txt")
     else:
         typer.echo(text)
@@ -310,7 +310,7 @@ def mcp(
         response.raise_for_status()
         raw = response.text
     else:
-        raw = Path(spec).read_text()
+        raw = Path(spec).read_text(encoding="utf-8")
     try:
         spec_data = json.loads(raw)
     except json.JSONDecodeError:
@@ -327,7 +327,7 @@ def mcp(
         target = output / filename
         if target.exists():
             raise typer.BadParameter(f"{target} already exists — refusing to overwrite")
-        target.write_text(content)
+        target.write_text(content, encoding="utf-8")
     typer.echo(f"Scaffolded MCP server in {output}/ — review server.py before deploying")
 
 

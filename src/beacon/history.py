@@ -25,7 +25,7 @@ def save_run(domain: str, payload: dict) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     path = directory / f"{stamp}.json"
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return path
 
 
@@ -35,7 +35,7 @@ def load_runs(domain: str, limit: int = 2) -> list[dict]:
     if not directory.is_dir():
         return []
     files = sorted(directory.glob("*.json"))[-limit:]
-    return [json.loads(path.read_text()) for path in files]
+    return [json.loads(path.read_text(encoding="utf-8")) for path in files]
 
 
 def change_summary(old: dict, new: dict) -> dict:
