@@ -19,7 +19,7 @@
 ![category](https://img.shields.io/badge/category-Agents%20%2F%20Discovery-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Medium-yellow)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-67%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-98%20passing-brightgreen)
 
 ```
 ┌─[ TARGET ]──────────────────────────────────────────────────┐
@@ -78,10 +78,15 @@ uv run beacon --help
 uv run beacon audit shop.example                    # human report
 uv run beacon audit shop.example --json             # machine report
 uv run beacon audit shop.example --html report.html # shareable HTML report
+uv run beacon audit shop.example --md report.md     # Markdown report for issues/PRs
 uv run beacon audit shop.example --min-score 70     # CI gate: exit 1 below threshold
+uv run beacon audit shop.example --only crawl_policy,content  # run a subset of layers
+uv run beacon audit shop.example --skip checkout    # or skip layers instead
 uv run beacon audit --file domains.txt              # batch audit → ranking table
 uv run beacon audit --file rivals.txt --html bench.html  # competitor benchmark report
+uv run beacon compare shop.example rival.example    # head-to-head terminal diff
 uv run beacon diff shop.example                     # what changed since the last audit
+uv run beacon history shop.example                  # recorded runs; --export and --prune
 uv run beacon watch shop.example -i 6h              # scheduled re-audits, diff on change
 uv run beacon watch --file rivals.txt --once        # one cycle (cron-friendly): exit 3 on change
 uv run beacon badge shop.example -o badge.json      # shields.io endpoint JSON from the last audit
@@ -105,6 +110,8 @@ Crawl policy
 
 ```bash
 uv run beacon generate llms-txt shop.example -o llms.txt   # sitemap-driven draft
+uv run beacon generate robots-txt shop.example             # unblock agent fetchers, keep training bots
+uv run beacon generate schema shop.example                 # Product JSON-LD draft from a product page
 uv run beacon generate mcp openapi.json                    # runnable MCP server scaffold
 ```
 
@@ -150,7 +157,8 @@ uv run beacon simulate shop.example --json   # machine-readable verdicts
 
 ```
 src/beacon/
-├── cli.py              audit · watch · diff · simulate · generate
+├── cli.py              audit · compare · watch · diff · history · badge · simulate · generate
+├── config.py           beacon.toml defaults (audit.min_score/only/skip, watch.interval/webhook)
 ├── fetch.py            polite client: honest UA, deduped, bounded concurrency
 ├── discover.py         sitemap walking (incl. index children) · homepage links
 ├── platform.py         Shopify/Woo/Wix/... detection → platform-aware fixes
@@ -167,6 +175,8 @@ src/beacon/
 ├── simulate.py         Claude-driven agent dry-run (optional `ai` extra)
 └── generate/
     ├── llmstxt.py      sitemap → curated llms.txt draft
+    ├── robotstxt.py    corrected robots.txt: agent fetchers allowed, training rules kept
+    ├── schema.py       product page → Product/Offer JSON-LD draft
     └── mcp_scaffold.py OpenAPI spec → runnable FastMCP server project
 ```
 
