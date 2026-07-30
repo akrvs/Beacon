@@ -13,7 +13,7 @@ import httpx
 import typer
 import yaml
 
-from beacon import history, report
+from beacon import config, history, report
 from beacon.checks import ALL_CHECKS
 from beacon.checks.base import Finding, Layer
 from beacon.fetch import Site, USER_AGENT, normalize_base_url
@@ -41,6 +41,14 @@ async def run_audit(domain: str, layers: set[Layer] | None = None) -> tuple[Site
     finally:
         await site.aclose()
     return site, [finding for check_findings in results for finding in check_findings]
+
+
+def _config_section(section: str) -> dict:
+    try:
+        loaded = config.load_config().get(section, {})
+    except ValueError as error:
+        raise typer.BadParameter(str(error))
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _resolve_layers(only: str | None, skip: str | None) -> set[Layer] | None:
@@ -93,6 +101,11 @@ def audit(
     """Audit one domain (or a file of domains) and print a scored report."""
     if (domain is None) == (domains_file is None):
         raise typer.BadParameter("Provide either DOMAIN or --file, not both")
+    cfg = _config_section("audit")
+    if min_score is None:
+        min_score = cfg.get("min_score")
+    if only is None and skip is None:
+        only, skip = cfg.get("only"), cfg.get("skip")
     layers = _resolve_layers(only, skip)
     if domains_file is not None:
         _audit_batch(
@@ -371,7 +384,7 @@ def watch(
         None, "--file", "-f", help="Watch every domain in this file (one per line)"
     ),
     interval: str = typer.Option(
-        "6h", "--interval", "-i", help="Time between audits: 30m, 6h, 1d (bare number = minutes)"
+        None, "--interval", "-i", help="Time between audits: 30m, 6h, 1d (bare number = minutes, default 6h)"
     ),
     once: bool = typer.Option(
         False, "--once", help="Run one cycle and exit; exit code 3 if anything changed (for cron/CI)"
@@ -386,6 +399,9 @@ def watch(
     """Re-audit on a schedule and report what changed since the previous recorded run."""
     if (domain is None) == (domains_file is None):
         raise typer.BadParameter("Provide either DOMAIN or --file, not both")
+    cfg = _config_section("watch")
+    interval = interval or cfg.get("interval") or "6h"
+    webhook = webhook or cfg.get("webhook")
     domains = _read_domains(domains_file) if domains_file is not None else [domain]
     seconds = _parse_interval(interval)
 

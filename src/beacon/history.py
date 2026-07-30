@@ -7,17 +7,14 @@ Runs live under $BEACON_HOME/history/<domain>/<utc timestamp>.json
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from beacon.config import beacon_home
+
 
 def history_dir() -> Path:
-    root = os.environ.get("BEACON_HOME")
-    if root is None:
-        data_home = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
-        root = str(Path(data_home) / "beacon")
-    return Path(root) / "history"
+    return beacon_home() / "history"
 
 
 def save_run(domain: str, payload: dict) -> Path:
