@@ -54,6 +54,11 @@ def audit(
         "--html",
         help="Also write a shareable HTML report (a ranked benchmark when used with --file)",
     ),
+    md: Path = typer.Option(
+        None,
+        "--md",
+        help="Also write a Markdown report (a ranking table when used with --file)",
+    ),
     min_score: int = typer.Option(
         None,
         "--min-score",
@@ -67,7 +72,9 @@ def audit(
     if (domain is None) == (domains_file is None):
         raise typer.BadParameter("Provide either DOMAIN or --file, not both")
     if domains_file is not None:
-        _audit_batch(domains_file, json_out=json_out, min_score=min_score, save=save, html=html)
+        _audit_batch(
+            domains_file, json_out=json_out, min_score=min_score, save=save, html=html, md=md
+        )
         return
 
     site, findings = asyncio.run(run_audit(domain))
@@ -80,6 +87,9 @@ def audit(
     if html is not None:
         html.write_text(report.render_html(site.domain, findings, card), encoding="utf-8")
         typer.echo(f"\nHTML report written to {html}")
+    if md is not None:
+        md.write_text(report.render_markdown(site.domain, findings, card), encoding="utf-8")
+        typer.echo(f"\nMarkdown report written to {md}")
     if save:
         history.save_run(site.domain, data)
     if min_score is not None and (card.today.percent or 0) < min_score:
@@ -115,7 +125,13 @@ def _run_audits(domains: list[str]) -> list[tuple[Site, list[Finding]]]:
 
 
 def _audit_batch(
-    domains_file: Path, *, json_out: bool, min_score: int | None, save: bool, html: Path | None
+    domains_file: Path,
+    *,
+    json_out: bool,
+    min_score: int | None,
+    save: bool,
+    html: Path | None,
+    md: Path | None = None,
 ) -> None:
     domains = _read_domains(domains_file)
     results = []
@@ -131,6 +147,10 @@ def _audit_batch(
     if html is not None:
         html.write_text(report.render_benchmark_html(results), encoding="utf-8")
         typer.echo(f"Benchmark HTML written to {html}", err=json_out)
+
+    if md is not None:
+        md.write_text(report.render_ranking_markdown(results), encoding="utf-8")
+        typer.echo(f"Ranking Markdown written to {md}", err=json_out)
 
     if json_out:
         batch = [payloads[domain] for domain, _, _ in results]

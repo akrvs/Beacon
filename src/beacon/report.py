@@ -62,6 +62,58 @@ def _fmt(percent: int | None) -> str:
     return f"{percent}/100" if percent is not None else "n/a (no checks in this tier yet)"
 
 
+def render_markdown(domain: str, findings: list[Finding], card: ScoreCard) -> str:
+    audited = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines = [
+        f"# Beacon audit — {domain}",
+        "",
+        f"Audited {audited}",
+        "",
+        f"- Agent visibility today: **{_fmt(card.today.percent)}**",
+        f"- Future readiness: {_fmt(card.future.percent)}",
+    ]
+    for layer in Layer:
+        layer_findings = [f for f in findings if f.layer is layer]
+        if not layer_findings:
+            continue
+        lines += ["", f"## {_LAYER_TITLE[layer]}", "", "| Status | Check | Summary | Fix |", "|---|---|---|---|"]
+        for finding in layer_findings:
+            status = finding.status.value.upper()
+            if finding.tier is Tier.FUTURE:
+                status += " (future)"
+            summary = finding.summary
+            if finding.evidence:
+                summary += f" — evidence: {finding.evidence}"
+            fix = finding.fix if finding.fix and finding.status in (Status.WARN, Status.FAIL) else ""
+            lines.append(
+                f"| {status} | {_md_cell(finding.id)} | {_md_cell(summary)} | {_md_cell(fix)} |"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def render_ranking_markdown(results: list[tuple[str, list[Finding], ScoreCard]]) -> str:
+    audited = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines = [
+        f"# Beacon benchmark — {len(results)} domains",
+        "",
+        f"Audited {audited}",
+        "",
+        "| # | Domain | Today | Future | Fixes |",
+        "|---|---|---|---|---|",
+    ]
+    for rank, (domain, findings, card) in enumerate(results, start=1):
+        fixes = sum(1 for f in findings if f.fix and f.status in (Status.WARN, Status.FAIL))
+        lines.append(
+            f"| {rank} | {_md_cell(domain)} | {_num(card.today.percent)}"
+            f" | {_num(card.future.percent)} | {fixes} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _md_cell(text: str) -> str:
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
 _HTML_STATUS = {
     Status.PASS: ("PASS", "pass"),
     Status.WARN: ("WARN", "warn"),
