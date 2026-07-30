@@ -157,6 +157,21 @@ def _audit_batch(
             raise typer.Exit(1)
 
 
+@app.command(help="Audit two domains and print a head-to-head comparison")
+def compare(
+    domain_a: str = typer.Argument(..., help="First domain or URL"),
+    domain_b: str = typer.Argument(..., help="Second domain or URL"),
+    save: bool = typer.Option(True, "--save/--no-save", help="Record the runs in audit history"),
+) -> None:
+    results = []
+    for site, findings in _run_audits([domain_a, domain_b]):
+        card = score(findings)
+        results.append((site.domain, findings, card))
+        if save:
+            history.save_run(site.domain, report.payload(site.domain, findings, card))
+    typer.echo(report.render_compare(results[0], results[1]))
+
+
 @app.command()
 def simulate(
     domain: str = typer.Argument(..., help="Domain to test with a simulated agent"),

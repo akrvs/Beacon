@@ -171,6 +171,68 @@ def render_benchmark_html(results: list[tuple[str, list[Finding], ScoreCard]]) -
     )
 
 
+_RANK = {Status.PASS: 2, Status.WARN: 1, Status.FAIL: 0}
+
+
+def render_compare(
+    left: tuple[str, list[Finding], ScoreCard],
+    right: tuple[str, list[Finding], ScoreCard],
+) -> str:
+    (left_domain, left_findings, left_card) = left
+    (right_domain, right_findings, right_card) = right
+    left_by_id = {f.id: f for f in left_findings}
+    right_by_id = {f.id: f for f in right_findings}
+    label_width = max(
+        len("Agent visibility today"),
+        *(len(f"  {f.id}") for f in left_findings + right_findings),
+    )
+    left_width = max(len(left_domain), 6)
+
+    def row(label: str, a: str, b: str, marker: str = "") -> str:
+        return f"{label.ljust(label_width)}  {a.ljust(left_width)}  {b}{marker}".rstrip()
+
+    title = f"Beacon compare — {left_domain} vs {right_domain}"
+    lines = [
+        title,
+        "=" * len(title),
+        "",
+        row("", left_domain, right_domain),
+        row("Agent visibility today", _num(left_card.today.percent), _num(right_card.today.percent)),
+        row("Future readiness", _num(left_card.future.percent), _num(right_card.future.percent)),
+    ]
+
+    left_wins = right_wins = 0
+    for layer in Layer:
+        check_ids: list[str] = []
+        for finding in left_findings + right_findings:
+            if finding.layer is layer and finding.id not in check_ids:
+                check_ids.append(finding.id)
+        if not check_ids:
+            continue
+        lines += ["", _LAYER_TITLE[layer], "-" * len(_LAYER_TITLE[layer])]
+        for check_id in check_ids:
+            a = left_by_id.get(check_id)
+            b = right_by_id.get(check_id)
+            a_rank = _RANK.get(a.status) if a is not None else None
+            b_rank = _RANK.get(b.status) if b is not None else None
+            marker = ""
+            if a_rank is not None and b_rank is not None and a_rank != b_rank:
+                if a_rank > b_rank:
+                    left_wins += 1
+                    marker = f"  <- {left_domain}"
+                else:
+                    right_wins += 1
+                    marker = f"  <- {right_domain}"
+            lines.append(row(f"  {check_id}", _status_word(a), _status_word(b), marker))
+
+    lines += ["", f"{left_domain} leads on {left_wins} check(s), {right_domain} on {right_wins}."]
+    return "\n".join(lines)
+
+
+def _status_word(finding: Finding | None) -> str:
+    return finding.status.value.upper() if finding is not None else "-"
+
+
 def _num(percent: int | None) -> str:
     return str(percent) if percent is not None else "–"
 
