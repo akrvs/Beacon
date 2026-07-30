@@ -19,6 +19,7 @@ from beacon.checks.base import Finding
 from beacon.fetch import Site, USER_AGENT, normalize_base_url
 from beacon.generate.llmstxt import generate_llms_txt
 from beacon.generate.mcp_scaffold import scaffold_mcp_server
+from beacon.generate.robotstxt import generate_robots_txt
 from beacon.scoring import score
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -339,6 +340,34 @@ def llms_txt(
     if output is not None:
         output.write_text(text, encoding="utf-8")
         typer.echo(f"Wrote {output} — review the draft before publishing it at /llms.txt")
+    else:
+        typer.echo(text)
+
+
+@generate_app.command(
+    "robots-txt",
+    help="Emit a corrected robots.txt: unblock live agent fetchers, declare the sitemap",
+)
+def robots_txt(
+    domain: str = typer.Argument(..., help="Domain or URL to fix robots.txt for"),
+    output: Path = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout"),
+) -> None:
+    async def run() -> str | None:
+        site = Site(domain)
+        try:
+            return await generate_robots_txt(site)
+        finally:
+            await site.aclose()
+
+    text = asyncio.run(run())
+    if text is None:
+        typer.echo(
+            "robots.txt already allows all live agent fetchers and declares a sitemap — nothing to fix"
+        )
+        return
+    if output is not None:
+        output.write_text(text, encoding="utf-8")
+        typer.echo(f"Wrote {output} — review the draft before publishing it at /robots.txt")
     else:
         typer.echo(text)
 
