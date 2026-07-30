@@ -20,6 +20,7 @@ from beacon.fetch import Site, USER_AGENT, normalize_base_url
 from beacon.generate.llmstxt import generate_llms_txt
 from beacon.generate.mcp_scaffold import scaffold_mcp_server
 from beacon.generate.robotstxt import generate_robots_txt
+from beacon.generate.schema import PLACEHOLDER, generate_product_schema
 from beacon.scoring import score
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -368,6 +369,44 @@ def robots_txt(
     if output is not None:
         output.write_text(text, encoding="utf-8")
         typer.echo(f"Wrote {output} — review the draft before publishing it at /robots.txt")
+    else:
+        typer.echo(text)
+
+
+@generate_app.command(
+    "schema",
+    help="Draft Product JSON-LD for a product page, ready to paste into the page head",
+)
+def schema(
+    target: str = typer.Argument(..., help="Product page URL, or a domain to auto-discover one"),
+    output: Path = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout"),
+) -> None:
+    page_url = (
+        target
+        if target.startswith(("http://", "https://")) and httpx.URL(target).path.strip("/")
+        else None
+    )
+
+    async def run() -> str | None:
+        site = Site(target)
+        try:
+            return await generate_product_schema(site, page_url)
+        finally:
+            await site.aclose()
+
+    try:
+        text = asyncio.run(run())
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2)
+    if text is None:
+        typer.echo("Product JSON-LD is already complete — nothing to generate")
+        return
+    if output is not None:
+        output.write_text(text, encoding="utf-8")
+        typer.echo(
+            f"Wrote {output} — review the draft, fill any {PLACEHOLDER} values, then embed it in the product page"
+        )
     else:
         typer.echo(text)
 

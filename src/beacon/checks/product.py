@@ -25,7 +25,7 @@ class ProductCheck:
     layer = Layer.CONTENT
 
     async def run(self, site: Site) -> list[Finding]:
-        product_url = await self._find_product_page(site)
+        product_url = await find_product_page(site)
         if product_url is None:
             return [
                 Finding(
@@ -115,12 +115,13 @@ class ProductCheck:
             )
         ]
 
-    async def _find_product_page(self, site: Site) -> str | None:
-        for url in await crawlable_urls(site):
-            path = httpx.URL(url).path.lower()
-            if any(hint in path for hint in PRODUCT_PATH_HINTS) and path.rstrip("/").count("/") >= 2:
-                return url
-        return None
+
+async def find_product_page(site: Site) -> str | None:
+    for url in await crawlable_urls(site):
+        path = httpx.URL(url).path.lower()
+        if any(hint in path for hint in PRODUCT_PATH_HINTS) and path.rstrip("/").count("/") >= 2:
+            return url
+    return None
 
 
 _COMMERCE_PATTERN = re.compile(
