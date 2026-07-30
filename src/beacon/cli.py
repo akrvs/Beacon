@@ -216,6 +216,62 @@ def diff(
     typer.echo(history.diff_runs(runs[0], runs[1]))
 
 
+@app.command("history", help="List, export, or prune recorded audit runs")
+def history_cmd(
+    domain: str = typer.Argument(None, help="Domain to inspect; omit to list all recorded domains"),
+    prune_keep: int = typer.Option(None, "--prune", help="Delete all but the newest N runs", min=0),
+    export: Path = typer.Option(None, "--export", help="Write every run for the domain to a JSON file"),
+) -> None:
+    if domain is None:
+        if prune_keep is not None or export is not None:
+            raise typer.BadParameter("--prune and --export need a DOMAIN")
+        _list_recorded_domains()
+        return
+
+    key = httpx.URL(normalize_base_url(domain)).host
+    files = history.run_files(key)
+    if not files:
+        typer.echo(f"No recorded audits for {key} — run `beacon audit {key}` first", err=True)
+        raise typer.Exit(2)
+    if export is not None:
+        runs = history.load_runs(key, limit=len(files))
+        export.write_text(json.dumps(runs, indent=2, ensure_ascii=False), encoding="utf-8")
+        typer.echo(f"Exported {len(runs)} run(s) to {export}")
+    if prune_keep is not None:
+        removed = history.prune(key, prune_keep)
+        typer.echo(f"Pruned {removed} run(s), kept {len(history.run_files(key))}")
+    if export is not None or prune_keep is not None:
+        return
+
+    runs = history.load_runs(key, limit=len(files))
+    typer.echo(f"Audit history — {key} ({len(runs)} run(s))")
+    typer.echo("")
+    typer.echo(f"{'audited_at'.ljust(25)}  today  future")
+    for run in runs:
+        typer.echo(
+            f"{str(run.get('audited_at') or '?').ljust(25)}"
+            f"  {_score_cell(run.get('score_today')).ljust(5)}  {_score_cell(run.get('score_future'))}"
+        )
+
+
+def _score_cell(value: int | None) -> str:
+    return str(value) if value is not None else "n/a"
+
+
+def _list_recorded_domains() -> None:
+    domains = history.recorded_domains()
+    if not domains:
+        typer.echo("No recorded audits yet — run `beacon audit <domain>` first")
+        return
+    width = max(len(name) for name in domains)
+    typer.echo(f"{'domain'.ljust(width)}  runs  latest today")
+    for name in domains:
+        runs = history.load_runs(name, limit=1)
+        count = len(history.run_files(name))
+        latest = runs[-1].get("score_today") if runs else None
+        typer.echo(f"{name.ljust(width)}  {str(count).ljust(4)}  {_score_cell(latest)}")
+
+
 _BADGE_COLORS = [(80, "brightgreen"), (60, "green"), (40, "yellow"), (20, "orange"), (0, "red")]
 
 

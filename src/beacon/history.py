@@ -31,11 +31,30 @@ def save_run(domain: str, payload: dict) -> Path:
 
 def load_runs(domain: str, limit: int = 2) -> list[dict]:
     """Most recent runs for a domain, oldest first."""
+    files = run_files(domain)[-limit:]
+    return [json.loads(path.read_text(encoding="utf-8")) for path in files]
+
+
+def run_files(domain: str) -> list[Path]:
     directory = history_dir() / domain
     if not directory.is_dir():
         return []
-    files = sorted(directory.glob("*.json"))[-limit:]
-    return [json.loads(path.read_text(encoding="utf-8")) for path in files]
+    return sorted(directory.glob("*.json"))
+
+
+def recorded_domains() -> list[str]:
+    root = history_dir()
+    if not root.is_dir():
+        return []
+    return sorted(path.name for path in root.iterdir() if path.is_dir())
+
+
+def prune(domain: str, keep: int) -> int:
+    files = run_files(domain)
+    stale = files[: len(files) - keep] if keep else files
+    for path in stale:
+        path.unlink()
+    return len(stale)
 
 
 def change_summary(old: dict, new: dict) -> dict:
