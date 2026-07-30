@@ -15,7 +15,7 @@ import yaml
 
 from beacon import history, report
 from beacon.checks import ALL_CHECKS
-from beacon.checks.base import Finding
+from beacon.checks.base import Finding, Layer
 from beacon.fetch import Site, USER_AGENT, normalize_base_url
 from beacon.generate.llmstxt import generate_llms_txt
 from beacon.generate.mcp_scaffold import scaffold_mcp_server
@@ -33,13 +33,31 @@ def main() -> None:
     """Beacon — audit and improve a business's agent-readiness."""
 
 
-async def run_audit(domain: str) -> tuple[Site, list[Finding]]:
+async def run_audit(domain: str, layers: set[Layer] | None = None) -> tuple[Site, list[Finding]]:
+    checks = ALL_CHECKS if layers is None else [c for c in ALL_CHECKS if c.layer in layers]
     site = Site(domain)
     try:
-        results = await asyncio.gather(*(check.run(site) for check in ALL_CHECKS))
+        results = await asyncio.gather(*(check.run(site) for check in checks))
     finally:
         await site.aclose()
     return site, [finding for check_findings in results for finding in check_findings]
+
+
+def _resolve_layers(only: str | None, skip: str | None) -> set[Layer] | None:
+    if only and skip:
+        raise typer.BadParameter("Use --only or --skip, not both")
+    if not only and not skip:
+        return None
+    names = {name.strip() for name in (only or skip).split(",") if name.strip()}
+    try:
+        chosen = {Layer(name) for name in names}
+    except ValueError:
+        valid = ", ".join(layer.value for layer in Layer)
+        raise typer.BadParameter(f"Unknown layer in {only or skip!r} — valid layers: {valid}")
+    layers = chosen if only else set(Layer) - chosen
+    if not layers:
+        raise typer.BadParameter("Every layer is skipped — nothing to audit")
+    return layers
 
 
 @app.command()
@@ -66,18 +84,29 @@ def audit(
         min=0,
         max=100,
     ),
+    only: str = typer.Option(
+        None, "--only", help="Comma-separated layers to run: crawl_policy,content,api_mcp,checkout"
+    ),
+    skip: str = typer.Option(None, "--skip", help="Comma-separated layers to skip"),
     save: bool = typer.Option(True, "--save/--no-save", help="Record the run in audit history"),
 ) -> None:
     """Audit one domain (or a file of domains) and print a scored report."""
     if (domain is None) == (domains_file is None):
         raise typer.BadParameter("Provide either DOMAIN or --file, not both")
+    layers = _resolve_layers(only, skip)
     if domains_file is not None:
         _audit_batch(
-            domains_file, json_out=json_out, min_score=min_score, save=save, html=html, md=md
+            domains_file,
+            json_out=json_out,
+            min_score=min_score,
+            save=save,
+            html=html,
+            md=md,
+            layers=layers,
         )
         return
 
-    site, findings = asyncio.run(run_audit(domain))
+    site, findings = asyncio.run(run_audit(domain, layers))
     card = score(findings)
     data = report.payload(site.domain, findings, card)
     if json_out:
@@ -111,13 +140,15 @@ def _read_domains(domains_file: Path) -> list[str]:
     return domains
 
 
-def _run_audits(domains: list[str]) -> list[tuple[Site, list[Finding]]]:
+def _run_audits(
+    domains: list[str], layers: set[Layer] | None = None
+) -> list[tuple[Site, list[Finding]]]:
     async def run_all() -> list[tuple[Site, list[Finding]]]:
         gate = asyncio.Semaphore(MAX_PARALLEL_SITES)
 
         async def one(entry: str) -> tuple[Site, list[Finding]]:
             async with gate:
-                return await run_audit(entry)
+                return await run_audit(entry, layers)
 
         return list(await asyncio.gather(*(one(entry) for entry in domains)))
 
@@ -132,11 +163,12 @@ def _audit_batch(
     save: bool,
     html: Path | None,
     md: Path | None = None,
+    layers: set[Layer] | None = None,
 ) -> None:
     domains = _read_domains(domains_file)
     results = []
     payloads: dict[str, dict] = {}
-    for site, findings in _run_audits(domains):
+    for site, findings in _run_audits(domains, layers):
         card = score(findings)
         results.append((site.domain, findings, card))
         payloads[site.domain] = report.payload(site.domain, findings, card)
