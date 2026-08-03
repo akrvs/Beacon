@@ -18,7 +18,7 @@ from beacon import config, history, report
 from beacon.checks import ALL_CHECKS
 from beacon.checks.base import Finding, Layer
 from beacon.fetch import Site, USER_AGENT, normalize_base_url
-from beacon.generate.llmstxt import generate_llms_txt
+from beacon.generate.llmstxt import generate_llms_full_txt, generate_llms_txt
 from beacon.generate.mcp_scaffold import scaffold_mcp_server
 from beacon.generate.robotstxt import generate_robots_txt
 from beacon.generate.schema import PLACEHOLDER, generate_product_schema
@@ -537,6 +537,28 @@ def llms_txt(
     if output is not None:
         output.write_text(text, encoding="utf-8")
         typer.echo(f"Wrote {output} — review the draft before publishing it at /llms.txt")
+    else:
+        typer.echo(text)
+
+
+@generate_app.command("llms-full")
+def llms_full(
+    domain: str = typer.Argument(..., help="Domain or URL to generate llms-full.txt for"),
+    output: Path = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout"),
+) -> None:
+    """Draft an llms-full.txt with the full extracted text of the curated pages."""
+
+    async def run() -> str:
+        site = Site(domain)
+        try:
+            return await generate_llms_full_txt(site)
+        finally:
+            await site.aclose()
+
+    text = asyncio.run(run())
+    if output is not None:
+        output.write_text(text, encoding="utf-8")
+        typer.echo(f"Wrote {output} — review the draft before publishing it at /llms-full.txt")
     else:
         typer.echo(text)
 

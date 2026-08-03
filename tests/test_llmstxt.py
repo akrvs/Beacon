@@ -2,7 +2,7 @@ import httpx
 import respx
 
 from beacon.fetch import Fetcher, Site
-from beacon.generate.llmstxt import generate_llms_txt
+from beacon.generate.llmstxt import generate_llms_full_txt, generate_llms_txt
 
 BASE = "https://shop.example"
 
@@ -45,6 +45,32 @@ async def test_generates_from_sitemap():
     assert "## Products" in text and "## Docs" in text
     assert "- [Widget](https://shop.example/products/widget): Our best widget" in text
     assert "- [Shipping](https://shop.example/docs/shipping)\n" in text
+
+
+@respx.mock
+async def test_generates_llms_full_with_page_text():
+    respx.get(f"{BASE}/robots.txt").respond(200, text=f"Sitemap: {BASE}/sitemap.xml\n")
+    respx.get(f"{BASE}/sitemap.xml").respond(200, text=SITEMAP)
+    respx.get(f"{BASE}/products/widget").respond(
+        200,
+        text=(
+            "<html><head><title>Widget</title></head>"
+            "<body><script>ignored()</script><main>A fine widget for 9.99</main></body></html>"
+        ),
+        headers={"content-type": "text/html"},
+    )
+    respx.get(f"{BASE}/docs/shipping").respond(404)
+    respx.get(BASE).mock(return_value=page("Acme Shop", "Widgets worldwide"))
+
+    site = make_site()
+    text = await generate_llms_full_txt(site)
+    await site.aclose()
+
+    assert text.startswith("# Acme Shop\n\n> Widgets worldwide\n")
+    assert "## Widget\nhttps://shop.example/products/widget\n\nA fine widget for 9.99" in text
+    assert "ignored()" not in text
+    assert "shipping" not in text
+    assert not text.rstrip().endswith("---")
 
 
 @respx.mock

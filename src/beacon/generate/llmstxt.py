@@ -16,6 +16,7 @@ from beacon.discover import crawlable_urls
 from beacon.fetch import Site
 
 MAX_PAGES = 20
+MAX_FULL_CHARS = 10_000
 
 
 @dataclass
@@ -52,6 +53,40 @@ async def generate_llms_txt(site: Site) -> str:
                 lines.append(f"- [{page.title}]({page.url}){suffix}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+async def generate_llms_full_txt(site: Site) -> str:
+    """llms-full.txt companion: the same curated pages, with full extracted text."""
+    homepage = await site.homepage()
+    site_title, site_description = _title_and_description(homepage)
+    site_title = site_title or site.domain
+
+    urls = await crawlable_urls(site)
+    sections = await asyncio.gather(*(_full_section(site, url) for url in urls[:MAX_PAGES]))
+
+    lines = [f"# {site_title}", ""]
+    if site_description:
+        lines += [f"> {site_description}", ""]
+    body = "\n\n---\n\n".join(section for section in sections if section)
+    if body:
+        lines.append(body)
+    return "\n".join(lines).rstrip() + "\n"
+
+
+async def _full_section(site: Site, url: str) -> str | None:
+    response = await site.get(url)
+    if response is None or response.status_code >= 400:
+        return None
+    title, _ = _title_and_description(response)
+    return f"## {title or httpx.URL(url).path}\n{url}\n\n{_page_text(response.text)}"
+
+
+def _page_text(html: str) -> str:
+    tree = HTMLParser(html)
+    for node in tree.css("script, style, noscript, template, svg"):
+        node.decompose()
+    text = tree.body.text(separator=" ") if tree.body else ""
+    return " ".join(text.split())[:MAX_FULL_CHARS]
 
 
 def _title_and_description(response: httpx.Response | None) -> tuple[str, str]:
