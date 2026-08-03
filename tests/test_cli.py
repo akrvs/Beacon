@@ -62,6 +62,18 @@ def test_batch_html_benchmark(two_domains, tmp_path):
     assert "good.example" in html and "bad.example" in html
 
 
+@respx.mock
+def test_audit_fail_only_hides_passes(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    mock_domain(BAD, "User-agent: *\nDisallow: /\n")
+    result = runner.invoke(app, ["audit", "bad.example", "--fail-only"])
+    assert result.exit_code == 0
+    assert "Agent visibility today" in result.output
+    assert "FAIL" in result.output
+    assert "PASS" not in result.output
+    assert "INFO" not in result.output
+
+
 def test_domain_and_file_are_mutually_exclusive(tmp_path):
     domains = tmp_path / "d.txt"
     domains.write_text("a.example\n")

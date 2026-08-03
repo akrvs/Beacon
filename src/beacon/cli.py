@@ -101,6 +101,9 @@ def audit(
         None, "--only", help="Comma-separated layers to run: crawl_policy,content,api_mcp,checkout"
     ),
     skip: str = typer.Option(None, "--skip", help="Comma-separated layers to skip"),
+    fail_only: bool = typer.Option(
+        False, "--fail-only", help="Show only WARN and FAIL findings in the terminal report"
+    ),
     save: bool = typer.Option(True, "--save/--no-save", help="Record the run in audit history"),
 ) -> None:
     """Audit one domain (or a file of domains) and print a scored report."""
@@ -131,7 +134,7 @@ def audit(
     if json_out:
         typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
     else:
-        typer.echo(report.render_text(site.domain, findings, card))
+        typer.echo(report.render_text(site.domain, findings, card, fail_only=fail_only))
     if html is not None:
         html.write_text(report.render_html(site.domain, findings, card), encoding="utf-8")
         typer.echo(f"\nHTML report written to {html}")

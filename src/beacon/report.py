@@ -34,7 +34,9 @@ def payload(domain: str, findings: list[Finding], card: ScoreCard) -> dict:
     }
 
 
-def render_text(domain: str, findings: list[Finding], card: ScoreCard) -> str:
+def render_text(
+    domain: str, findings: list[Finding], card: ScoreCard, *, fail_only: bool = False
+) -> str:
     lines = [
         f"Beacon audit — {domain}",
         "=" * (15 + len(domain)),
@@ -44,6 +46,8 @@ def render_text(domain: str, findings: list[Finding], card: ScoreCard) -> str:
     ]
     for layer in Layer:
         layer_findings = [f for f in findings if f.layer is layer]
+        if fail_only:
+            layer_findings = [f for f in layer_findings if f.status in (Status.WARN, Status.FAIL)]
         if not layer_findings:
             continue
         lines += ["", f"{_LAYER_TITLE[layer]}", "-" * len(_LAYER_TITLE[layer])]
