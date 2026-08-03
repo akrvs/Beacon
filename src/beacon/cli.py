@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 import typer
 import yaml
+from urllib.parse import quote
 
 from beacon import config, history, report
 from beacon.checks import ALL_CHECKS
@@ -386,8 +387,16 @@ _BADGE_COLORS = [(80, "brightgreen"), (60, "green"), (40, "yellow"), (20, "orang
 def badge(
     domain: str = typer.Argument(..., help="Domain with at least one recorded audit"),
     output: Path = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout"),
+    md: bool = typer.Option(
+        False, "--md", help="Emit the README Markdown badge line instead of the JSON"
+    ),
+    url: str = typer.Option(
+        None, "--url", help="Public URL where the badge JSON is hosted (used with --md)"
+    ),
 ) -> None:
     """Emit shields.io endpoint JSON for the domain's latest recorded visibility score."""
+    if url and not md:
+        raise typer.BadParameter("--url only makes sense with --md")
     key = httpx.URL(normalize_base_url(domain)).host
     runs = history.load_runs(key, limit=1)
     if not runs:
@@ -402,9 +411,15 @@ def badge(
     payload = json.dumps(
         {"schemaVersion": 1, "label": "agent visibility", "message": message, "color": color}
     )
+    if md:
+        endpoint = quote(url, safe="") if url else "<BADGE-JSON-URL>"
+        payload = f"![agent visibility](https://img.shields.io/endpoint?url={endpoint})"
     if output is not None:
         output.write_text(payload, encoding="utf-8")
-        typer.echo(f"Badge JSON written to {output} — point a shields.io endpoint badge at it")
+        if md:
+            typer.echo(f"Badge Markdown written to {output}")
+        else:
+            typer.echo(f"Badge JSON written to {output} — point a shields.io endpoint badge at it")
     else:
         typer.echo(payload)
 

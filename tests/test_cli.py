@@ -155,6 +155,22 @@ def test_badge_from_recorded_history(two_domains):
     assert badge["color"]
 
 
+@respx.mock
+def test_badge_md_line(two_domains):
+    runner.invoke(app, ["audit", "--file", str(two_domains)])
+    result = runner.invoke(app, ["badge", "good.example", "--md"])
+    assert result.exit_code == 0
+    assert result.output.strip() == (
+        "![agent visibility](https://img.shields.io/endpoint?url=<BADGE-JSON-URL>)"
+    )
+    hosted = runner.invoke(
+        app, ["badge", "good.example", "--md", "--url", "https://x.example/badge.json"]
+    )
+    assert "url=https%3A%2F%2Fx.example%2Fbadge.json" in hosted.output
+    no_md = runner.invoke(app, ["badge", "good.example", "--url", "https://x.example/b.json"])
+    assert no_md.exit_code != 0
+
+
 def test_badge_needs_history(tmp_path, monkeypatch):
     monkeypatch.setenv("BEACON_HOME", str(tmp_path))
     assert runner.invoke(app, ["badge", "never.example"]).exit_code == 2
