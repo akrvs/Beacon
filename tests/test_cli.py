@@ -52,6 +52,14 @@ def test_batch_json_and_history(two_domains):
 
 
 @respx.mock
+def test_batch_parallel_flag(two_domains):
+    result = runner.invoke(app, ["audit", "--file", str(two_domains), "--parallel", "1"])
+    assert result.exit_code == 0
+    assert result.output.splitlines()[0].startswith("rank")
+    assert runner.invoke(app, ["audit", "--file", str(two_domains), "--parallel", "0"]).exit_code != 0
+
+
+@respx.mock
 def test_batch_html_benchmark(two_domains, tmp_path):
     out = tmp_path / "benchmark.html"
     result = runner.invoke(app, ["audit", "--file", str(two_domains), "--html", str(out)])

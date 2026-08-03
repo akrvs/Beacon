@@ -108,6 +108,12 @@ def audit(
         None, "--only", help="Comma-separated layers to run: crawl_policy,content,api_mcp,checkout"
     ),
     skip: str = typer.Option(None, "--skip", help="Comma-separated layers to skip"),
+    parallel: int = typer.Option(
+        None,
+        "--parallel",
+        help="Concurrent domains for --file batch audits (default 4)",
+        min=1,
+    ),
     fail_only: bool = typer.Option(
         False, "--fail-only", help="Show only WARN and FAIL findings in the terminal report"
     ),
@@ -121,6 +127,8 @@ def audit(
         min_score = cfg.get("min_score")
     if only is None and skip is None:
         only, skip = cfg.get("only"), cfg.get("skip")
+    if parallel is None:
+        parallel = cfg.get("parallel")
     layers = _resolve_layers(only, skip)
     if domains_file is not None:
         _audit_batch(
@@ -132,6 +140,7 @@ def audit(
             md=md,
             csv_out=csv_out,
             layers=layers,
+            parallel=parallel,
         )
         return
 
@@ -173,10 +182,12 @@ def _read_domains(domains_file: Path) -> list[str]:
 
 
 def _run_audits(
-    domains: list[str], layers: set[Layer] | None = None
+    domains: list[str],
+    layers: set[Layer] | None = None,
+    parallel: int | None = None,
 ) -> list[tuple[Site, list[Finding]]]:
     async def run_all() -> list[tuple[Site, list[Finding]]]:
-        gate = asyncio.Semaphore(MAX_PARALLEL_SITES)
+        gate = asyncio.Semaphore(parallel or MAX_PARALLEL_SITES)
 
         async def one(entry: str) -> tuple[Site, list[Finding]]:
             async with gate:
@@ -197,11 +208,12 @@ def _audit_batch(
     md: Path | None = None,
     csv_out: Path | None = None,
     layers: set[Layer] | None = None,
+    parallel: int | None = None,
 ) -> None:
     domains = _read_domains(domains_file)
     results = []
     payloads: dict[str, dict] = {}
-    for site, findings in _run_audits(domains, layers):
+    for site, findings in _run_audits(domains, layers, parallel):
         card = score(findings)
         results.append((site.domain, findings, card))
         payloads[site.domain] = report.payload(site.domain, findings, card)
