@@ -34,6 +34,20 @@ def test_audit_reads_min_score_and_layers_from_config(good_domain):
 
 
 @respx.mock
+def test_audit_ignore_drops_findings_from_run_and_score(good_domain):
+    baseline = runner.invoke(app, ["audit", "good.example", "--json", "--no-save"])
+    data = json.loads(baseline.output)
+    target = data["findings"][0]["id"]
+    (good_domain / "beacon.toml").write_text(
+        f'[audit]\nignore = ["{target}"]\n', encoding="utf-8"
+    )
+    result = runner.invoke(app, ["audit", "good.example", "--json", "--no-save"])
+    filtered = json.loads(result.output)
+    assert target not in {f["id"] for f in filtered["findings"]}
+    assert len(filtered["findings"]) == len(data["findings"]) - 1
+
+
+@respx.mock
 def test_cli_flags_override_config(good_domain):
     (good_domain / "beacon.toml").write_text("[audit]\nmin_score = 90\n", encoding="utf-8")
     result = runner.invoke(app, ["audit", "good.example", "--min-score", "0"])

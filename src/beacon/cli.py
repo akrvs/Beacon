@@ -40,7 +40,12 @@ async def run_audit(domain: str, layers: set[Layer] | None = None) -> tuple[Site
         results = await asyncio.gather(*(check.run(site) for check in checks))
     finally:
         await site.aclose()
-    return site, [finding for check_findings in results for finding in check_findings]
+    findings = [finding for check_findings in results for finding in check_findings]
+    ignored = _config_section("audit").get("ignore")
+    if ignored:
+        ignored = set(ignored) if isinstance(ignored, list) else {ignored}
+        findings = [f for f in findings if f.id not in ignored]
+    return site, findings
 
 
 def _config_section(section: str) -> dict:
