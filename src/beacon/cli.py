@@ -21,6 +21,7 @@ from beacon.generate.llmstxt import generate_llms_txt
 from beacon.generate.mcp_scaffold import scaffold_mcp_server
 from beacon.generate.robotstxt import generate_robots_txt
 from beacon.generate.schema import PLACEHOLDER, generate_product_schema
+from beacon.generate.sitemapxml import generate_sitemap
 from beacon.scoring import score
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -542,6 +543,28 @@ def robots_txt(
     if output is not None:
         output.write_text(text, encoding="utf-8")
         typer.echo(f"Wrote {output} — review the draft before publishing it at /robots.txt")
+    else:
+        typer.echo(text)
+
+
+@generate_app.command(
+    "sitemap", help="Draft a sitemap.xml from the homepage's same-domain links"
+)
+def sitemap(
+    domain: str = typer.Argument(..., help="Domain or URL to draft a sitemap for"),
+    output: Path = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout"),
+) -> None:
+    async def run() -> str:
+        site = Site(domain)
+        try:
+            return await generate_sitemap(site)
+        finally:
+            await site.aclose()
+
+    text = asyncio.run(run())
+    if output is not None:
+        output.write_text(text, encoding="utf-8")
+        typer.echo(f"Wrote {output} — review the draft before publishing it at /sitemap.xml")
     else:
         typer.echo(text)
 
