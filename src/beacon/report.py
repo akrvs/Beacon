@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 import html
+import io
 from datetime import datetime, timezone
 
 from beacon.checks.base import Finding, Layer, Status, Tier
@@ -112,6 +114,44 @@ def render_ranking_markdown(results: list[tuple[str, list[Finding], ScoreCard]])
 
 def _md_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
+
+
+def render_csv(domain: str, findings: list[Finding], card: ScoreCard) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(["domain", "layer", "id", "status", "tier", "summary", "fix"])
+    for finding in findings:
+        fix = finding.fix if finding.fix and finding.status in (Status.WARN, Status.FAIL) else ""
+        writer.writerow(
+            [
+                domain,
+                finding.layer.value,
+                finding.id,
+                finding.status.value,
+                finding.tier.value,
+                finding.summary,
+                fix,
+            ]
+        )
+    return buffer.getvalue()
+
+
+def render_ranking_csv(results: list[tuple[str, list[Finding], ScoreCard]]) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(["rank", "domain", "today", "future", "fixes"])
+    for rank, (domain, findings, card) in enumerate(results, start=1):
+        fixes = sum(1 for f in findings if f.fix and f.status in (Status.WARN, Status.FAIL))
+        writer.writerow(
+            [
+                rank,
+                domain,
+                card.today.percent if card.today.percent is not None else "",
+                card.future.percent if card.future.percent is not None else "",
+                fixes,
+            ]
+        )
+    return buffer.getvalue()
 
 
 _HTML_STATUS = {

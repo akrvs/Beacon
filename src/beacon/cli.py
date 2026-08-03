@@ -85,6 +85,11 @@ def audit(
         "--md",
         help="Also write a Markdown report (a ranking table when used with --file)",
     ),
+    csv_out: Path = typer.Option(
+        None,
+        "--csv",
+        help="Also write a CSV report (a ranking table when used with --file)",
+    ),
     min_score: int = typer.Option(
         None,
         "--min-score",
@@ -115,6 +120,7 @@ def audit(
             save=save,
             html=html,
             md=md,
+            csv_out=csv_out,
             layers=layers,
         )
         return
@@ -132,6 +138,9 @@ def audit(
     if md is not None:
         md.write_text(report.render_markdown(site.domain, findings, card), encoding="utf-8")
         typer.echo(f"\nMarkdown report written to {md}")
+    if csv_out is not None:
+        csv_out.write_text(report.render_csv(site.domain, findings, card), encoding="utf-8")
+        typer.echo(f"\nCSV report written to {csv_out}")
     if save:
         history.save_run(site.domain, data)
     if min_score is not None and (card.today.percent or 0) < min_score:
@@ -176,6 +185,7 @@ def _audit_batch(
     save: bool,
     html: Path | None,
     md: Path | None = None,
+    csv_out: Path | None = None,
     layers: set[Layer] | None = None,
 ) -> None:
     domains = _read_domains(domains_file)
@@ -196,6 +206,10 @@ def _audit_batch(
     if md is not None:
         md.write_text(report.render_ranking_markdown(results), encoding="utf-8")
         typer.echo(f"Ranking Markdown written to {md}", err=json_out)
+
+    if csv_out is not None:
+        csv_out.write_text(report.render_ranking_csv(results), encoding="utf-8")
+        typer.echo(f"Ranking CSV written to {csv_out}", err=json_out)
 
     if json_out:
         batch = [payloads[domain] for domain, _, _ in results]
