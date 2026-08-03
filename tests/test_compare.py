@@ -34,6 +34,17 @@ def test_compare_head_to_head(two_domains):
 
 
 @respx.mock
+def test_compare_html_report(two_domains, tmp_path):
+    out = tmp_path / "versus.html"
+    result = runner.invoke(app, ["compare", "bad.example", "good.example", "--html", str(out)])
+    assert result.exit_code == 0
+    assert f"HTML comparison written to {out}" in result.output
+    html = out.read_text(encoding="utf-8")
+    assert "good.example" in html and "bad.example" in html
+    assert "leader: good.example" in html
+
+
+@respx.mock
 def test_compare_saves_history(two_domains):
     runner.invoke(app, ["compare", "good.example", "bad.example"])
     diff = runner.invoke(app, ["diff", "good.example"])

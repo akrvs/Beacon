@@ -261,6 +261,9 @@ def score_cmd(
 def compare(
     domain_a: str = typer.Argument(..., help="First domain or URL"),
     domain_b: str = typer.Argument(..., help="Second domain or URL"),
+    html: Path = typer.Option(
+        None, "--html", help="Also write a shareable HTML comparison report"
+    ),
     save: bool = typer.Option(True, "--save/--no-save", help="Record the runs in audit history"),
 ) -> None:
     results = []
@@ -270,6 +273,10 @@ def compare(
         if save:
             history.save_run(site.domain, report.payload(site.domain, findings, card))
     typer.echo(report.render_compare(results[0], results[1]))
+    if html is not None:
+        ranked = sorted(results, key=lambda item: item[2].today.percent or 0, reverse=True)
+        html.write_text(report.render_benchmark_html(ranked), encoding="utf-8")
+        typer.echo(f"\nHTML comparison written to {html}")
 
 
 @app.command()
