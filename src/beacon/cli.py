@@ -383,6 +383,17 @@ def _list_recorded_domains() -> None:
 _BADGE_COLORS = [(80, "brightgreen"), (60, "green"), (40, "yellow"), (20, "orange"), (0, "red")]
 
 
+def _badge_json(score_today: int | None) -> str:
+    if score_today is None:
+        message, color = "n/a", "lightgrey"
+    else:
+        message = f"{score_today}/100"
+        color = next(c for threshold, c in _BADGE_COLORS if score_today >= threshold)
+    return json.dumps(
+        {"schemaVersion": 1, "label": "agent visibility", "message": message, "color": color}
+    )
+
+
 @app.command()
 def badge(
     domain: str = typer.Argument(..., help="Domain with at least one recorded audit"),
@@ -402,15 +413,7 @@ def badge(
     if not runs:
         typer.echo(f"No recorded audits for {key} — run `beacon audit {key}` first", err=True)
         raise typer.Exit(2)
-    score_today = runs[-1].get("score_today")
-    if score_today is None:
-        message, color = "n/a", "lightgrey"
-    else:
-        message = f"{score_today}/100"
-        color = next(c for threshold, c in _BADGE_COLORS if score_today >= threshold)
-    payload = json.dumps(
-        {"schemaVersion": 1, "label": "agent visibility", "message": message, "color": color}
-    )
+    payload = _badge_json(runs[-1].get("score_today"))
     if md:
         endpoint = quote(url, safe="") if url else "<BADGE-JSON-URL>"
         payload = f"![agent visibility](https://img.shields.io/endpoint?url={endpoint})"
@@ -452,10 +455,15 @@ def watch(
     html: Path = typer.Option(
         None, "--html", help="Rewrite an HTML status page (benchmark for --file) after every cycle"
     ),
+    badge_out: Path = typer.Option(
+        None, "--badge", help="Rewrite shields.io badge JSON after every cycle (single domain only)"
+    ),
 ) -> None:
     """Re-audit on a schedule and report what changed since the previous recorded run."""
     if (domain is None) == (domains_file is None):
         raise typer.BadParameter("Provide either DOMAIN or --file, not both")
+    if badge_out is not None and domains_file is not None:
+        raise typer.BadParameter("--badge works with a single DOMAIN, not --file")
     cfg = _config_section("watch")
     interval = interval or cfg.get("interval") or "6h"
     webhook = webhook or cfg.get("webhook")
@@ -463,7 +471,7 @@ def watch(
     seconds = _parse_interval(interval)
 
     while True:
-        any_changes = _watch_cycle(domains, webhook, html)
+        any_changes = _watch_cycle(domains, webhook, html, badge_out)
         if once:
             raise typer.Exit(3 if any_changes else 0)
         typer.echo(f"Next audit in {interval} — Ctrl-C to stop.")
@@ -474,7 +482,12 @@ def watch(
             return
 
 
-def _watch_cycle(domains: list[str], webhook: str | None, html: Path | None = None) -> bool:
+def _watch_cycle(
+    domains: list[str],
+    webhook: str | None,
+    html: Path | None = None,
+    badge_out: Path | None = None,
+) -> bool:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     any_changes = False
     results = []
@@ -506,6 +519,9 @@ def _watch_cycle(domains: list[str], webhook: str | None, html: Path | None = No
             page = report.render_benchmark_html(results)
         html.write_text(page, encoding="utf-8")
         typer.echo(f"Status page written to {html}")
+    if badge_out is not None and results:
+        badge_out.write_text(_badge_json(results[0][2].today.percent), encoding="utf-8")
+        typer.echo(f"Badge JSON written to {badge_out}")
     return any_changes
 
 

@@ -138,6 +138,23 @@ def test_watch_once_writes_status_page(two_domains, tmp_path):
     assert "Beacon audit" in single.read_text(encoding="utf-8")
 
 
+@respx.mock
+def test_watch_once_writes_badge(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    mock_domain(GOOD, "User-agent: *\nAllow: /\n")
+    out = tmp_path / "badge.json"
+    result = runner.invoke(app, ["watch", "good.example", "--once", "--badge", str(out)])
+    assert result.exit_code == 0
+    badge = json.loads(out.read_text(encoding="utf-8"))
+    assert badge["label"] == "agent visibility"
+    assert badge["message"].endswith("/100")
+
+    domains = tmp_path / "d.txt"
+    domains.write_text("good.example\n")
+    rejected = runner.invoke(app, ["watch", "--file", str(domains), "--once", "--badge", str(out)])
+    assert rejected.exit_code not in (0, 3)
+
+
 def test_watch_rejects_bad_interval():
     result = runner.invoke(app, ["watch", "x.example", "--once", "--interval", "soon"])
     assert result.exit_code != 0
