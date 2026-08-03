@@ -239,6 +239,18 @@ def _audit_batch(
             raise typer.Exit(1)
 
 
+@app.command("score", help="Audit a domain and print only the bare agent-visibility score")
+def score_cmd(
+    domain: str = typer.Argument(..., help="Domain or URL to audit"),
+    save: bool = typer.Option(True, "--save/--no-save", help="Record the run in audit history"),
+) -> None:
+    site, findings = asyncio.run(run_audit(domain))
+    card = score(findings)
+    if save:
+        history.save_run(site.domain, report.payload(site.domain, findings, card))
+    typer.echo(card.today.percent if card.today.percent is not None else "n/a")
+
+
 @app.command(help="Audit two domains and print a head-to-head comparison")
 def compare(
     domain_a: str = typer.Argument(..., help="First domain or URL"),

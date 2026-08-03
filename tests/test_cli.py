@@ -63,6 +63,17 @@ def test_batch_html_benchmark(two_domains, tmp_path):
 
 
 @respx.mock
+def test_score_prints_bare_number_and_saves(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    mock_domain(GOOD, "User-agent: *\nAllow: /\n")
+    result = runner.invoke(app, ["score", "good.example"])
+    assert result.exit_code == 0
+    assert result.output.strip().isdigit()
+    badge = runner.invoke(app, ["badge", "good.example"])
+    assert badge.exit_code == 0
+
+
+@respx.mock
 def test_audit_fail_only_hides_passes(tmp_path, monkeypatch):
     monkeypatch.setenv("BEACON_HOME", str(tmp_path))
     mock_domain(BAD, "User-agent: *\nDisallow: /\n")
