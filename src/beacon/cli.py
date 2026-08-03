@@ -448,6 +448,45 @@ def badge(
         typer.echo(payload)
 
 
+_KNOWN_KEYS = {
+    "audit": ("min_score", "only", "skip", "ignore", "parallel"),
+    "watch": ("interval", "webhook"),
+}
+
+
+@app.command("config", help="Show the resolved beacon.toml configuration")
+def config_cmd() -> None:
+    path = config.find_config()
+    if path is None:
+        typer.echo(
+            "No beacon.toml found (looked in ./beacon.toml and $BEACON_HOME/beacon.toml) — defaults in use"
+        )
+        return
+    try:
+        loaded = config.load_config()
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2)
+    typer.echo(f"Config file: {path}")
+    for section, keys in _KNOWN_KEYS.items():
+        values = loaded.get(section)
+        values = values if isinstance(values, dict) else {}
+        typer.echo(f"\n[{section}]")
+        for key in keys:
+            if key in values:
+                typer.echo(f"  {key} = {values[key]!r}")
+            else:
+                typer.echo(f"  {key} (unset)")
+    unknown = []
+    for section, values in loaded.items():
+        if section not in _KNOWN_KEYS:
+            unknown.append(f"[{section}]")
+        elif isinstance(values, dict):
+            unknown += [f"{section}.{key}" for key in values if key not in _KNOWN_KEYS[section]]
+    if unknown:
+        typer.echo(f"\nUnknown keys (ignored by beacon): {', '.join(unknown)}")
+
+
 _INTERVAL_UNITS = {"": 60, "s": 1, "m": 60, "h": 3600, "d": 86400}
 
 

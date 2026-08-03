@@ -13,11 +13,18 @@ def beacon_home() -> Path:
     return Path(root)
 
 
-def load_config() -> dict:
+def find_config() -> Path | None:
     for path in (Path("beacon.toml"), beacon_home() / "beacon.toml"):
         if path.is_file():
-            try:
-                return tomllib.loads(path.read_text(encoding="utf-8"))
-            except tomllib.TOMLDecodeError as error:
-                raise ValueError(f"{path} is not valid TOML: {error}") from error
-    return {}
+            return path
+    return None
+
+
+def load_config() -> dict:
+    path = find_config()
+    if path is None:
+        return {}
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as error:
+        raise ValueError(f"{path} is not valid TOML: {error}") from error

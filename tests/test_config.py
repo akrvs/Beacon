@@ -86,6 +86,30 @@ def test_cwd_config_wins_over_beacon_home(tmp_path, monkeypatch):
     assert load_config()["audit"]["min_score"] == 7
 
 
+def test_config_command_reports_resolved_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(tmp_path)
+    none = runner.invoke(app, ["config"])
+    assert none.exit_code == 0
+    assert "No beacon.toml found" in none.output
+
+    (tmp_path / "beacon.toml").write_text(
+        '[audit]\nmin_score = 90\ntypo = 1\n\n[watch]\ninterval = "1h"\n\n[extra]\nx = 1\n',
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["config"])
+    assert result.exit_code == 0
+    assert "beacon.toml" in result.output
+    assert "min_score = 90" in result.output
+    assert "interval = '1h'" in result.output
+    assert "webhook (unset)" in result.output
+    assert "audit.typo" in result.output
+    assert "[extra]" in result.output
+
+    (tmp_path / "beacon.toml").write_text("not toml [", encoding="utf-8")
+    assert runner.invoke(app, ["config"]).exit_code == 2
+
+
 def test_invalid_toml_is_a_clean_error(good_domain):
     (good_domain / "beacon.toml").write_text("not toml [", encoding="utf-8")
     result = runner.invoke(app, ["audit", "good.example"])
