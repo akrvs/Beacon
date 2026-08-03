@@ -311,17 +311,25 @@ def simulate(
 @app.command()
 def diff(
     domain: str = typer.Argument(..., help="Domain with at least two recorded audits"),
+    from_index: int = typer.Option(
+        2, "--from", help="Older run: its # in `beacon history` (1 = newest)", min=1
+    ),
+    to_index: int = typer.Option(
+        1, "--to", help="Newer run: its # in `beacon history` (1 = newest)", min=1
+    ),
 ) -> None:
-    """Compare the two most recent recorded audits of a domain."""
+    """Compare two recorded audits of a domain (defaults: previous vs latest)."""
     key = httpx.URL(normalize_base_url(domain)).host
-    runs = history.load_runs(key, limit=2)
-    if len(runs) < 2:
+    needed = max(from_index, to_index)
+    runs = history.load_runs(key, limit=needed)
+    if len(runs) < needed:
+        word = "two" if needed == 2 else str(needed)
         typer.echo(
-            f"Need two recorded runs for {key}, found {len(runs)} — run `beacon audit {key}` (history saves automatically)",
+            f"Need {word} recorded runs for {key}, found {len(runs)} — run `beacon audit {key}` (history saves automatically)",
             err=True,
         )
         raise typer.Exit(2)
-    typer.echo(history.diff_runs(runs[0], runs[1]))
+    typer.echo(history.diff_runs(runs[-from_index], runs[-to_index]))
 
 
 @app.command("history", help="List, export, or prune recorded audit runs")
@@ -354,10 +362,11 @@ def history_cmd(
     runs = history.load_runs(key, limit=len(files))
     typer.echo(f"Audit history — {key} ({len(runs)} run(s))")
     typer.echo("")
-    typer.echo(f"{'audited_at'.ljust(25)}  today  future")
-    for run in runs:
+    typer.echo(f"{'#'.ljust(4)}  {'audited_at'.ljust(25)}  today  future")
+    for position, run in enumerate(runs):
         typer.echo(
-            f"{str(run.get('audited_at') or '?').ljust(25)}"
+            f"{str(len(runs) - position).ljust(4)}"
+            f"  {str(run.get('audited_at') or '?').ljust(25)}"
             f"  {_score_cell(run.get('score_today')).ljust(5)}  {_score_cell(run.get('score_future'))}"
         )
 

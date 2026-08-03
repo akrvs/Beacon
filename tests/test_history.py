@@ -92,6 +92,21 @@ def test_history_lists_runs_for_domain(tmp_path, monkeypatch):
     assert "2026-07-13T12:00:00+00:00" in result.output
 
 
+def test_history_index_column_and_diff_by_index(tmp_path, monkeypatch):
+    seed(monkeypatch, tmp_path)
+    listing = runner.invoke(app, ["history", "shop.example"])
+    assert listing.output.splitlines()[2].startswith("#")
+    assert listing.output.splitlines()[3].startswith("3")
+
+    result = runner.invoke(app, ["diff", "shop.example", "--from", "3", "--to", "1"])
+    assert result.exit_code == 0
+    assert "50 → 70" in result.output
+
+    too_far = runner.invoke(app, ["diff", "shop.example", "--from", "9"])
+    assert too_far.exit_code == 2
+    assert "Need 9 recorded runs" in too_far.output
+
+
 def test_history_export_and_prune(tmp_path, monkeypatch):
     seed(monkeypatch, tmp_path)
     out = tmp_path / "runs.json"
