@@ -70,11 +70,14 @@ class Fetcher:
             return response
 
     async def aclose(self) -> None:
-        for task in self._tasks.values():
-            if not task.done():
-                task.cancel()
+        pending = [task for task in self._tasks.values() if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         if self._owns_client:
             await self._client.aclose()
+        self._tasks.clear()
 
 
 class Site:
