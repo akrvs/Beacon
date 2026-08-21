@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 
 @dataclass
@@ -53,12 +54,16 @@ class RobotsFile:
         return best_allow
 
 
-def _rule_matches(rule: str, path: str) -> bool:
+@lru_cache(maxsize=1024)
+def _rule_pattern(rule: str) -> re.Pattern:
     anchored = rule.endswith("$")
-    if anchored:
-        rule = rule[:-1]
-    pattern = ".*".join(re.escape(part) for part in rule.split("*"))
-    return re.fullmatch(pattern if anchored else f"{pattern}.*", path) is not None
+    body = rule[:-1] if anchored else rule
+    pattern = ".*".join(re.escape(part) for part in body.split("*"))
+    return re.compile(pattern if anchored else f"{pattern}.*")
+
+
+def _rule_matches(rule: str, path: str) -> bool:
+    return _rule_pattern(rule).fullmatch(path) is not None
 
 
 def parse_robots(text: str) -> RobotsFile:
