@@ -381,6 +381,10 @@ def history_cmd(
             f"  {str(run.get('audited_at') or '?').ljust(25)}"
             f"  {_score_cell(run.get('score_today')).ljust(5)}  {_score_cell(run.get('score_future'))}"
         )
+    trend = history.sparkline([run.get("score_today") for run in runs])
+    if trend:
+        typer.echo("")
+        typer.echo(f"trend  {trend}")
 
 
 def _score_cell(value: int | None) -> str:
@@ -554,19 +558,24 @@ def _watch_cycle(
     for site, findings in _run_audits(domains):
         card = score(findings)
         results.append((site.domain, findings, card))
-        previous = history.load_runs(site.domain, limit=1)
+        recent = history.load_runs(site.domain, limit=13)
         current = report.payload(site.domain, findings, card)
         history.save_run(site.domain, current)
         today = card.today.percent if card.today.percent is not None else "n/a"
-        if not previous:
+        trend = history.sparkline(
+            [run.get("score_today") for run in recent]
+            + ([card.today.percent] if card.today.percent is not None else [])
+        )
+        suffix = f" {trend}" if trend else ""
+        if not recent:
             typer.echo(f"[{stamp}] {site.domain}: baseline recorded (today {today})")
             continue
-        summary = history.change_summary(previous[0], current)
+        summary = history.change_summary(recent[-1], current)
         if not summary["has_changes"]:
-            typer.echo(f"[{stamp}] {site.domain}: no changes (today {today})")
+            typer.echo(f"[{stamp}] {site.domain}: no changes (today {today}){suffix}")
             continue
         any_changes = True
-        diff_text = history.diff_runs(previous[0], current)
+        diff_text = history.diff_runs(recent[-1], current)
         typer.echo(f"[{stamp}] {site.domain}: CHANGED")
         typer.echo("\n".join(f"  {line}" for line in diff_text.splitlines()))
         if webhook:

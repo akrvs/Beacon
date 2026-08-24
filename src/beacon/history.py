@@ -138,5 +138,22 @@ def _score_line(label: str, old: int | None, new: int | None) -> str:
     return f"{label} : {_fmt(old)} → {_fmt(new)}{delta}"
 
 
+_SPARK_CHARS = "▁▂▃▄▅▆▇█"
+
+
+def sparkline(values: list[int | None]) -> str:
+    """Block-character trend over the given scores (oldest first)."""
+    points = [v for v in values if isinstance(v, int)]
+    if len(points) < 2:
+        return ""
+    lo, hi = min(points), max(points)
+    span = hi - lo or 1
+    return "".join(
+        " " if not isinstance(v, int)
+        else _SPARK_CHARS[min(7, (v - lo) * 7 // span)]
+        for v in values
+    )
+
+
 def _fmt(value: int | None) -> str:
     return str(value) if value is not None else "n/a"
