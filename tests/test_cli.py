@@ -240,4 +240,4 @@ def test_watch_formats_slack_webhook_text(tmp_path, monkeypatch):
     assert hook.called
     body = json.loads(hook.calls.last.request.content)
     assert set(body) == {"text"}
-    assert "AGENT-FETCHERS-ALLOWED: PASS" in body["text"]
+    assert "agent-fetchers-allowed: PASS" in body["text"]
