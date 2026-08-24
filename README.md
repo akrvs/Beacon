@@ -202,6 +202,21 @@ src/beacon/
   can never leave a truncated JSON that breaks later `diff`, `history`, or
   `badge` reads
 
+## [ New Weapons ]
+
+- **Score trend lines** — `beacon history` ends with a block-character
+  sparkline of your recent scores, and watch mode appends the same trend to
+  every change line. Progress you can see at a glance.
+- **Webhook embeds** — `watch --webhook` detects Discord and Slack endpoints
+  and ships formatted embeds/text instead of raw JSON; anything else still
+  gets the machine-readable payload.
+- **Plugin checks** — installed packages can register extra checks via the
+  `beacon.checks` entry-point group: expose a class with `id`, `layer`, and an
+  async `run(site)`. Malformed plugins are skipped, never fatal.
+- **CI badge workflow** — `.github/workflows/badge.yml` re-audits
+  `$BEACON_BADGE_DOMAIN` nightly (or on demand), refreshes `badge.json` +
+  `badge.md`, and commits them. Set the repo variable and it runs itself.
+
 ## [ Rules of Engagement ]
 
 - Honest user agent (`BeaconBot/0.1`), no browser impersonation
