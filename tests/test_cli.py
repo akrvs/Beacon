@@ -205,3 +205,39 @@ def test_diff_needs_two_runs(tmp_path, monkeypatch):
     monkeypatch.setenv("BEACON_HOME", str(tmp_path))
     result = runner.invoke(app, ["diff", "never-audited.example"])
     assert result.exit_code == 2
+
+
+@respx.mock
+def test_watch_formats_discord_webhook_embeds(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    mock_domain(GOOD, "User-agent: *\nAllow: /\n")
+    runner.invoke(app, ["watch", "good.example", "--once"])
+    mock_domain(GOOD, "User-agent: *\nDisallow: /\n")
+    hook = respx.post("https://discord.com/api/webhooks/123/abc").respond(200)
+    third = runner.invoke(
+        app,
+        ["watch", "good.example", "--once", "--webhook", "https://discord.com/api/webhooks/123/abc"],
+    )
+    assert third.exit_code == 3
+    assert hook.called
+    body = json.loads(hook.calls.last.request.content)
+    assert "embeds" in body
+    assert body["embeds"][0]["title"].startswith("good.example: today")
+
+
+@respx.mock
+def test_watch_formats_slack_webhook_text(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    mock_domain(GOOD, "User-agent: *\nAllow: /\n")
+    runner.invoke(app, ["watch", "good.example", "--once"])
+    mock_domain(GOOD, "User-agent: *\nDisallow: /\n")
+    hook = respx.post("https://hooks.slack.com/services/T00/B00/XYZ").respond(200)
+    third = runner.invoke(
+        app,
+        ["watch", "good.example", "--once", "--webhook", "https://hooks.slack.com/services/T00/B00/XYZ"],
+    )
+    assert third.exit_code == 3
+    assert hook.called
+    body = json.loads(hook.calls.last.request.content)
+    assert set(body) == {"text"}
+    assert "AGENT-FETCHERS-ALLOWED: PASS" in body["text"]

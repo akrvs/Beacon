@@ -594,10 +594,42 @@ def _watch_cycle(
     return any_changes
 
 
+def _change_lines(payload: dict, limit: int = 10) -> list[str]:
+    scores = payload.get("score_today") or {}
+    domain = payload.get("domain") or "domain"
+    lines = [f"{domain}: today {scores.get('old')} → {scores.get('new')}"]
+    for change in (payload.get("changed") or [])[:limit]:
+        lines.append(
+            f"{change['id']}: {str(change['before']).upper()} → {str(change['after']).upper()}"
+        )
+    lines += [f"+ {f['id']}" for f in (payload.get("added") or [])[:limit]]
+    lines += [f"- {f['id']}" for f in (payload.get("removed") or [])[:limit]]
+    return lines
+
+
+def _webhook_body(url: str, payload: dict) -> dict:
+    """Shape the notification for the receiver: Discord embeds and Slack text
+    for known hosts, the raw change payload everywhere else."""
+    host = httpx.URL(url).host or ""
+    if host.endswith(("discord.com", "discordapp.com")):
+        lines = _change_lines(payload)
+        return {
+            "embeds": [
+                {"title": lines[0], "description": "\n".join(lines[1:])[:3900]}
+            ]
+        }
+    if host == "hooks.slack.com":
+        return {"text": "```\n" + "\n".join(_change_lines(payload))[:3900] + "\n```"}
+    return payload
+
+
 def _notify_webhook(url: str, payload: dict) -> None:
     try:
         response = httpx.post(
-            url, json=payload, headers={"User-Agent": USER_AGENT}, timeout=15.0
+            url,
+            json=_webhook_body(url, payload),
+            headers={"User-Agent": USER_AGENT},
+            timeout=15.0,
         )
         response.raise_for_status()
     except httpx.HTTPError as error:
