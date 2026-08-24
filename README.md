@@ -192,6 +192,16 @@ src/beacon/
     └── mcp_scaffold.py OpenAPI spec → runnable FastMCP server project
 ```
 
+## [ Patch Notes ] — hardening round
+
+- In-flight requests are awaited on shutdown instead of abandoned, so a
+  Ctrl-C mid-audit no longer leaves orphaned connections behind
+- robots.txt rules compile once per rule and match every sitemap URL from
+  cache - large sitemaps audit noticeably faster
+- Audit runs land on disk atomically (temp file + rename): a crash mid-write
+  can never leave a truncated JSON that breaks later `diff`, `history`, or
+  `badge` reads
+
 ## [ Rules of Engagement ]
 
 - Honest user agent (`BeaconBot/0.1`), no browser impersonation
