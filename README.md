@@ -217,6 +217,26 @@ src/beacon/
   `$BEACON_BADGE_DOMAIN` nightly (or on demand), refreshes `badge.json` +
   `badge.md`, and commits them. Set the repo variable and it runs itself.
 
+## [ Round Two ]
+
+- **Score history chart** — single-domain HTML reports now draw an inline SVG
+  of your recent scores above the findings. The trend is the story.
+- **`beacon fix`** — one command generates every missing piece (robots.txt,
+  llms.txt, llms-full.txt, sitemap.xml, product schema) into a reviewable
+  bundle folder instead of running each generator by hand.
+- **`watch --alert-below N`** — noise filter for watch mode: minor changes are
+  summarized in one muted line, and only score drops or threshold breaches
+  fire CHANGED output, webhooks, and the exit code.
+- **YAML custom checks** — drop files into `$BEACON_HOME/checks/*.yaml`
+  describing probes (`path`, `expect_status`, `text_contains`,
+  `header_exists`) and they join every audit with your chosen layer, tier,
+  weight, and failure severity. No Python required.
+- **`beacon-mcp`** — a dependency-free MCP server over stdio: point Claude
+  Desktop or Cursor at it and ask `score_site`, `audit_site`, or `site_trend`
+  from chat.
+- **Pages leaderboard** — `benchmark.yml` audits `$BEACON_BENCHMARK_DOMAINS`
+  weekly and publishes the ranked benchmark HTML to GitHub Pages.
+
 ## [ Rules of Engagement ]
 
 - Honest user agent (`BeaconBot/0.1`), no browser impersonation
