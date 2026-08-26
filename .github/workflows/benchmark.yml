@@ -1,0 +1,40 @@
+name: agent visibility benchmark
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    if: ${{ vars.BEACON_BENCHMARK_DOMAINS != '' }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: Audit the tracked domains and build the leaderboard
+        env:
+          DOMAINS: ${{ vars.BEACON_BENCHMARK_DOMAINS }}
+        run: |
+          printf '%s\n' "$DOMAINS" | tr ' ' '\n' > domains.txt
+          beacon audit --file domains.txt --html index.html --md index.md --csv index.csv --no-save
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
