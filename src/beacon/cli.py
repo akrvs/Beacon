@@ -152,7 +152,11 @@ def audit(
     else:
         typer.echo(report.render_text(site.domain, findings, card, fail_only=fail_only))
     if html is not None:
-        html.write_text(report.render_html(site.domain, findings, card), encoding="utf-8")
+        history_runs = history.load_runs(site.domain, limit=19)
+        trend = [run.get("score_today") for run in history_runs] + [card.today.percent]
+        html.write_text(
+            report.render_html(site.domain, findings, card, trend=trend), encoding="utf-8"
+        )
         typer.echo(f"\nHTML report written to {html}")
     if md is not None:
         md.write_text(report.render_markdown(site.domain, findings, card), encoding="utf-8")

@@ -166,7 +166,13 @@ _HTML_STATUS = {
 }
 
 
-def render_html(domain: str, findings: list[Finding], card: ScoreCard) -> str:
+def render_html(
+    domain: str,
+    findings: list[Finding],
+    card: ScoreCard,
+    *,
+    trend: list[int | None] | None = None,
+) -> str:
     """Self-contained shareable HTML report (no external assets, light/dark)."""
     audited = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     sections = []
@@ -200,7 +206,34 @@ def render_html(domain: str, findings: list[Finding], card: ScoreCard) -> str:
         audited=audited,
         today=_fmt(card.today.percent),
         future=_fmt(card.future.percent),
+        trend=_trend_svg(trend or []),
         sections="".join(sections),
+    )
+
+
+def _trend_svg(points: list[int | None]) -> str:
+    """Inline SVG of the recent score history (0-100), empty when thin."""
+    values = [p for p in points if isinstance(p, int)]
+    if len(values) < 2:
+        return ""
+    width, height, pad = 220, 48, 4
+    span = max(max(values) - min(values), 1)
+    step = (width - 2 * pad) / (len(values) - 1)
+    coords = [
+        (
+            round(pad + index * step),
+            round(height - pad - (value - min(values)) * (height - 2 * pad) / span),
+        )
+        for index, value in enumerate(values)
+    ]
+    path = " ".join(f"{x},{y}" for x, y in coords)
+    return (
+        f'<div class="trend"><span class="label">recent scores</span>'
+        f"<svg width=\"{width}\" height=\"{height}\" role=\"img\" "
+        f"aria-label=\"score trend\">"
+        f'<polyline fill="none" stroke="var(--pass)" stroke-width="2" '
+        f'stroke-linejoin="round" points="{path}"/></svg>'
+        f"<span class='label'>{values[0]} → {values[-1]}</span></div>"
     )
 
 
@@ -385,6 +418,10 @@ _HTML_TEMPLATE = """<!doctype html>
   .detail {{ color: var(--muted); font-size: .85rem; margin: .25rem 0 0 .35rem;
             overflow-wrap: anywhere; }}
   .detail.fix {{ color: var(--fg); }}
+  .trend {{ margin-top: 1.25rem; }}
+  .trend svg {{ display: block; margin-top: .25rem; }}
+  .trend .label {{ color: var(--muted); font-size: .75rem; text-transform: uppercase;
+                  letter-spacing: .05em; }}
   footer {{ color: var(--muted); font-size: .8rem; margin-top: 2.5rem; }}
 </style>
 </head>

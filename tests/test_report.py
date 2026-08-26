@@ -58,3 +58,19 @@ def test_render_benchmark_html_ranks_and_compares():
     assert "robots-ok" in html and "extra-check" in html  # matrix is the union of checks
     assert html.count('class="na"') == 2  # sitemap missing for loser, extra-check for winner
     assert "cdn." not in html and "<script" not in html
+
+
+def test_render_html_includes_trend_svg():
+    findings = [
+        Finding(
+            id="x", layer=Layer.CONTENT, tier=Tier.TODAY,
+            status=Status.PASS, weight=1, summary="ok",
+        )
+    ]
+    card = score(findings)
+    html = render_html("shop.example", findings, card, trend=[40, 55, 70])
+    assert "<svg" in html and "polyline" in html
+    assert "recent scores" in html
+
+    plain = render_html("shop.example", findings, card, trend=[50])
+    assert "<svg" not in plain
