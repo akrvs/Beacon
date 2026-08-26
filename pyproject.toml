@@ -15,6 +15,7 @@ ai = ["anthropic>=0.40"]
 
 [project.scripts]
 beacon = "beacon.cli:app"
+beacon-mcp = "beacon.mcp_server:main"
 
 [dependency-groups]
 dev = [
