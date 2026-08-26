@@ -526,6 +526,13 @@ def watch(
     badge_out: Path = typer.Option(
         None, "--badge", help="Rewrite shields.io badge JSON after every cycle (single domain only)"
     ),
+    alert_below: int = typer.Option(
+        None,
+        "--alert-below",
+        help="Only surface changes that drop the score below this, or drop at all",
+        min=0,
+        max=100,
+    ),
 ) -> None:
     """Re-audit on a schedule and report what changed since the previous recorded run."""
     if (domain is None) == (domains_file is None):
@@ -539,7 +546,7 @@ def watch(
     seconds = _parse_interval(interval)
 
     while True:
-        any_changes = _watch_cycle(domains, webhook, html, badge_out)
+        any_changes = _watch_cycle(domains, webhook, html, badge_out, alert_below)
         if once:
             raise typer.Exit(3 if any_changes else 0)
         typer.echo(f"Next audit in {interval} — Ctrl-C to stop.")
@@ -555,6 +562,7 @@ def _watch_cycle(
     webhook: str | None,
     html: Path | None = None,
     badge_out: Path | None = None,
+    alert_below: int | None = None,
 ) -> bool:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     any_changes = False
@@ -577,6 +585,18 @@ def _watch_cycle(
         summary = history.change_summary(recent[-1], current)
         if not summary["has_changes"]:
             typer.echo(f"[{stamp}] {site.domain}: no changes (today {today}){suffix}")
+            continue
+        prev_score = recent[-1].get("score_today")
+        dropped = isinstance(prev_score, int) and card.today.percent is not None and (
+            card.today.percent < prev_score
+        )
+        below_threshold = alert_below is not None and isinstance(today, int) and today < alert_below
+        noteworthy = (dropped or below_threshold) if alert_below is not None else True
+        if not noteworthy:
+            typer.echo(
+                f"[{stamp}] {site.domain}: minor changes ignored "
+                f"(today {today}, threshold {alert_below})"
+            )
             continue
         any_changes = True
         diff_text = history.diff_runs(recent[-1], current)

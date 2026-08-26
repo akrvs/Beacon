@@ -253,3 +253,20 @@ def test_fix_bundle_writes_generators(tmp_path, monkeypatch):
     assert (out / "llms.txt").exists()
     assert (out / "robots.txt").exists()
     assert "Bundle ready" in result.output
+
+
+@respx.mock
+def test_watch_alert_threshold_ignores_improvements(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    mock_domain(GOOD, "User-agent: *\nDisallow: /\n")
+    runner.invoke(app, ["watch", "good.example", "--once"])
+    mock_domain(GOOD, "User-agent: *\nAllow: /\nSitemap: https://good.example/sm.xml\n")
+    result = runner.invoke(
+        app, ["watch", "good.example", "--once", "--alert-below", "50"]
+    )
+    assert result.exit_code == 0
+    assert "minor changes ignored" in result.output
+
+    mock_domain(GOOD, "User-agent: *\nDisallow: /\n")
+    drop = runner.invoke(app, ["watch", "good.example", "--once", "--alert-below", "50"])
+    assert drop.exit_code == 3
