@@ -801,10 +801,68 @@ def mcp(
     output.mkdir(parents=True, exist_ok=True)
     existing = [str(output / filename) for filename in files if (output / filename).exists()]
     if existing:
-        raise typer.BadParameter(f"{', '.join(existing)} already exist(s) — refusing to overwrite")
+        raise typer.BadParameter(f"{', '.join(existing)} already exist(s) - refusing to overwrite")
     for filename, content in files.items():
         (output / filename).write_text(content, encoding="utf-8")
-    typer.echo(f"Scaffolded MCP server in {output}/ — review server.py before deploying")
+    typer.echo(f"Scaffolded MCP server in {output}/ - review server.py before deploying")
+
+
+@app.command(help="Generate every missing agent-readiness piece into one folder")
+def fix(
+    domain: str = typer.Argument(..., help="Domain or URL to fix"),
+    output: Path = typer.Option(
+        Path("beacon-fixes"), "--output", "-o", help="Directory to write the bundle into"
+    ),
+) -> None:
+    """One pass over the site, every generator that has something to add."""
+    output.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    skipped: list[str] = []
+
+    async def run() -> None:
+        site = Site(domain)
+        try:
+            robots = await generate_robots_txt(site)
+            if robots is not None:
+                (output / "robots.txt").write_text(robots, encoding="utf-8")
+                written.append("robots.txt")
+            else:
+                skipped.append("robots.txt (already clean)")
+            (output / "llms.txt").write_text(await generate_llms_txt(site), encoding="utf-8")
+            written.append("llms.txt")
+            (output / "llms-full.txt").write_text(
+                await generate_llms_full_txt(site), encoding="utf-8"
+            )
+            written.append("llms-full.txt")
+            (output / "sitemap.xml").write_text(
+                await generate_sitemap(site), encoding="utf-8"
+            )
+            written.append("sitemap.xml")
+            try:
+                product_schema = await generate_product_schema(site)
+            except ValueError as error:
+                skipped.append(f"product schema ({error})")
+            else:
+                if product_schema is not None:
+                    (output / "product-schema.html").write_text(
+                        product_schema, encoding="utf-8"
+                    )
+                    written.append("product-schema.html")
+                else:
+                    skipped.append("product schema (already complete)")
+        finally:
+            await site.aclose()
+
+    asyncio.run(run())
+    mark = "+" if not skipped else "!"
+    for name in written:
+        typer.echo(f"[{mark}] {output / name}")
+    for note in skipped:
+        typer.echo(f"[-] {note}")
+    typer.echo("")
+    typer.echo(
+        f"Bundle ready in {output}/ - review each file before publishing it at the same path on your site."
+    )
 
 
 if __name__ == "__main__":

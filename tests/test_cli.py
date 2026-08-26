@@ -241,3 +241,15 @@ def test_watch_formats_slack_webhook_text(tmp_path, monkeypatch):
     body = json.loads(hook.calls.last.request.content)
     assert set(body) == {"text"}
     assert "agent-fetchers-allowed: PASS" in body["text"]
+
+
+@respx.mock
+def test_fix_bundle_writes_generators(tmp_path, monkeypatch):
+    monkeypatch.setenv("BEACON_HOME", str(tmp_path))
+    mock_domain(GOOD, "User-agent: *\nDisallow: /\n")
+    out = tmp_path / "bundle"
+    result = runner.invoke(app, ["fix", "good.example", "--output", str(out)])
+    assert result.exit_code == 0
+    assert (out / "llms.txt").exists()
+    assert (out / "robots.txt").exists()
+    assert "Bundle ready" in result.output
