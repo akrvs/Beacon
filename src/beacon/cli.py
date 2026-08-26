@@ -15,7 +15,7 @@ import yaml
 from urllib.parse import quote
 
 from beacon import config, history, report
-from beacon.checks import ALL_CHECKS
+from beacon.checks import all_checks
 from beacon.checks.base import Finding, Layer
 from beacon.fetch import Site, USER_AGENT, normalize_base_url
 from beacon.generate.llmstxt import generate_llms_full_txt, generate_llms_txt
@@ -36,7 +36,7 @@ def main() -> None:
 
 
 async def run_audit(domain: str, layers: set[Layer] | None = None) -> tuple[Site, list[Finding]]:
-    checks = ALL_CHECKS if layers is None else [c for c in ALL_CHECKS if c.layer in layers]
+    checks = all_checks() if layers is None else [c for c in all_checks() if c.layer in layers]
     site = Site(domain)
     try:
         results = await asyncio.gather(*(check.run(site) for check in checks))

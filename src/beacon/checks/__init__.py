@@ -46,4 +46,23 @@ def _plugin_checks() -> list[Check]:
 
 ALL_CHECKS: list[Check] = [*BUILTIN_CHECKS, *_plugin_checks()]
 
-__all__ = ["ALL_CHECKS", "BUILTIN_CHECKS", "ENTRY_POINT_GROUP", "Check", "Finding", "Layer", "Status", "Tier"]
+__all__ = [
+    "ALL_CHECKS",
+    "BUILTIN_CHECKS",
+    "ENTRY_POINT_GROUP",
+    "Check",
+    "Finding",
+    "Layer",
+    "Status",
+    "Tier",
+]
+
+
+def all_checks() -> list:
+    """Built-ins + entry-point plugins + YAML-authored checks.
+
+    Custom checks read $BEACON_HOME at call time, so they stay hot across
+    processes without re-import tricks."""
+    from beacon.checks.custom import load_custom_checks
+
+    return [*ALL_CHECKS, *load_custom_checks()]
